@@ -1,0 +1,281 @@
+{
+  "created": "2026-10-09",
+  "actions": [
+    {
+      "id": "lounge",
+      "originalDirectory": "01_趴姿晃头摆腿",
+      "frames": [
+        {
+          "file": "frame_01.png",
+          "sha256": "17d205533f622e168c803ffeb70a4815c21fb9ce95b80f6d6ef4696192e890f2",
+          "bytes": 43960
+        },
+        {
+          "file": "frame_02.png",
+          "sha256": "cbe9db1a138de6ed51a5fb389043f926b3e85b39652f7bebcfd9334c141372fe",
+          "bytes": 37463
+        },
+        {
+          "file": "frame_03.png",
+          "sha256": "3cf0787508d808d69d5622c4e8c2cab35872124a5314cb69863bf8bbd204c97c",
+          "bytes": 37082
+        },
+        {
+          "file": "frame_04.png",
+          "sha256": "617289947ad26e760af90580186327ae4713af4b9f4717cf99d10b88511296cd",
+          "bytes": 36674
+        },
+        {
+          "file": "frame_05.png",
+          "sha256": "b00fab5dd44e6eca77c2a765000d0b3c3a4bee9e5d1cd14150b7e37a5d49d0e0",
+          "bytes": 42987
+        },
+        {
+          "file": "frame_06.png",
+          "sha256": "fa0595955c58a309465df179f7b13ccfb1154309a8bc4b50502feaa7fad539a8",
+          "bytes": 40953
+        },
+        {
+          "file": "frame_07.png",
+          "sha256": "4870a28a33afa36f9c14f2c573ed1118f312e737cc3ff4c693ec8059b1849ebb",
+          "bytes": 43360
+        },
+        {
+          "file": "frame_08.png",
+          "sha256": "3a842c35ec50c642cffe9e654d94c019bf8bcc293b7cf3144bf7248dfbd3a8cd",
+          "bytes": 40511
+        }
+      ]
+    },
+    {
+      "id": "sway",
+      "originalDirectory": "02_站立轻晃",
+      "frames": [
+        {
+          "file": "frame_01.png",
+          "sha256": "8c5829288b5cf0b52bad9e16f7b2936beda53daf903b8f3e7f5ba25db7fa55b3",
+          "bytes": 32108
+        },
+        {
+          "file": "frame_02.png",
+          "sha256": "8ed05e77efaae7e8443b01a77f47f930d02434e9582a60df7298d7a8b3ae4416",
+          "bytes": 32920
+        },
+        {
+          "file": "frame_03.png",
+          "sha256": "7ba13bdb33d79b04d10ed8e8fa45c9697bad527a78c62c4945f061795934df15",
+          "bytes": 33839
+        },
+        {
+          "file": "frame_04.png",
+          "sha256": "88ea9b69a49f80fea343d61e24d031b15721b306b19cf04ce811fbb3d98bc81e",
+          "bytes": 32655
+        },
+        {
+          "file": "frame_05.png",
+          "sha256": "8d2dac89ecbbdd1c6063589e59d0a07d05f89c955f848f920c46741f9afd851f",
+          "bytes": 34383
+        },
+        {
+          "file": "frame_06.png",
+          "sha256": "a837ac5bb24963ba035385f811940a8e24b3b3ddebba4d94121fdab653be8486",
+          "bytes": 33823
+        },
+        {
+          "file": "frame_07.png",
+          "sha256": "9b7f05707808b44e65dad3320eb31b3df05cb6a1df643e888030a503a85d3ad0",
+          "bytes": 32594
+        },
+        {
+          "file": "frame_08.png",
+          "sha256": "cfdb22cec776de801132bef44af3a3913c8f9acdf0cd6d4ad4bc6e2a3434af98",
+          "bytes": 32811
+        }
+      ]
+    },
+    {
+      "id": "ponder",
+      "originalDirectory": "03_抱胸摸下巴踱步",
+      "frames": [
+        {
+          "file": "frame_01.png",
+          "sha256": "070b89f5d15d539bbfb5c04a6713ddc310e504cc405595a25dde2ff32f6f46bb",
+          "bytes": 36753
+        },
+        {
+          "file": "frame_02.png",
+          "sha256": "13fb2d9452b86a686328fd7c171b8ff2c6039f8681dc66806d2b0bf1e612dc6f",
+          "bytes": 82173
+        },
+        {
+          "file": "frame_03.png",
+          "sha256": "8de71cf691f967e185a5751e1d978decd19ff86f06a95350ae4cca66aebd75f9",
+          "bytes": 35611
+        },
+        {
+          "file": "frame_04.png",
+          "sha256": "9780d3910e73b81972d464acb450358ad1e21d5c72acd605f5f630b1a66c136c",
+          "bytes": 38176
+        },
+        {
+          "file": "frame_05.png",
+          "sha256": "d6342917244f1c7d38918a5ef806f563b75c1c0685f17197594a7448e265586d",
+          "bytes": 34816
+        },
+        {
+          "file": "frame_06.png",
+          "sha256": "2d7a1ecaac47cbb5ab5c62027c0b9a5fade6019c704580ecd4d68e0634ac2bb7",
+          "bytes": 34247
+        },
+        {
+          "file": "frame_07.png",
+          "sha256": "ea0de21b106cb7258750a16ee2bd4ae77ccd6c79967a55cbb610595f8c5e2b75",
+          "bytes": 36069
+        },
+        {
+          "file": "frame_08.png",
+          "sha256": "3f96c2d31358600ac0619d8c1f86e64a349b3050e62100bf4bcb75dce54395c0",
+          "bytes": 37411
+        }
+      ]
+    },
+    {
+      "id": "wait",
+      "originalDirectory": "04_等待确认",
+      "frames": [
+        {
+          "file": "frame_01.png",
+          "sha256": "2a35fb984c77ea8dfbce71ee13dd9b8ab58a7b4310ea1b9af01813f2b70b01a9",
+          "bytes": 33414
+        },
+        {
+          "file": "frame_02.png",
+          "sha256": "427b852beb930a1b769aa46bb3784cda60c5aae3f4d079c46198018d54c9ea0a",
+          "bytes": 35992
+        },
+        {
+          "file": "frame_03.png",
+          "sha256": "bc81999b141196273a273c20946a26e84ee3feb298778582f5f93c05e101313c",
+          "bytes": 27154
+        },
+        {
+          "file": "frame_04.png",
+          "sha256": "7bb35701c36dd34264ea88591bb51a4fff920da80ff5fa2b30ba4257efa25d05",
+          "bytes": 31973
+        },
+        {
+          "file": "frame_05.png",
+          "sha256": "96edb6956b83365d6cedf596debb50c0b48cc98815e9edcb8693ea10eb020bd6",
+          "bytes": 28695
+        },
+        {
+          "file": "frame_06.png",
+          "sha256": "2b8ac5f54ddb780563501fa9eafc4f9bdec492d1d9930ba2acb954ceea2764ab",
+          "bytes": 32239
+        },
+        {
+          "file": "frame_07.png",
+          "sha256": "2a0e96a2073a34f1b57e5670d2a60178b2d8f7cf36218d76d290b21614b446f5",
+          "bytes": 31097
+        },
+        {
+          "file": "frame_08.png",
+          "sha256": "6bddd008dd9aad3b9df61fdcbfbf7b41388681755eb70f63d7470d74684f2727",
+          "bytes": 32525
+        }
+      ]
+    },
+    {
+      "id": "doze",
+      "originalDirectory": "05_站着打盹",
+      "frames": [
+        {
+          "file": "frame_01.png",
+          "sha256": "78d43b5e6a215533e57a810fb6e20c6e9b913f7b229d969429d485d608c2eb53",
+          "bytes": 35401
+        },
+        {
+          "file": "frame_02.png",
+          "sha256": "c29e77d1fd773b47dad7ce845772898c0369658fea9b9f9ba3ba75a1c9bb198e",
+          "bytes": 33478
+        },
+        {
+          "file": "frame_03.png",
+          "sha256": "6e2ce6f6060edd7fc4ff6bd15dc4610d85bd869a3a8bc85643c46e08098529ea",
+          "bytes": 30745
+        },
+        {
+          "file": "frame_04.png",
+          "sha256": "59ba33b3084c4560ff33faf2e1311d880f03a230d6aed0824421260a57fbe921",
+          "bytes": 29701
+        },
+        {
+          "file": "frame_05.png",
+          "sha256": "e4b1b61739b9cb2d2b89280133e9403653cd8d24c8ececd389af95cba308f948",
+          "bytes": 30867
+        },
+        {
+          "file": "frame_06.png",
+          "sha256": "a4dbfaea1bb1644796b2d50fc6e12c8076aebda4d359f0fea385111e3545eb95",
+          "bytes": 34542
+        },
+        {
+          "file": "frame_07.png",
+          "sha256": "a40edd8771e756031f8f0921823f3143425bb6298edaad2b77fc9b0ffcb73d33",
+          "bytes": 33429
+        },
+        {
+          "file": "frame_08.png",
+          "sha256": "6a42cfeb497e27d18cebae7416d7c3669c276a095d8f135a0caf42c4755aad64",
+          "bytes": 33706
+        }
+      ]
+    },
+    {
+      "id": "wave",
+      "originalDirectory": "06_站立挥手",
+      "frames": [
+        {
+          "file": "frame_01.png",
+          "sha256": "ec83c74f903c0bf39ba1c68ac03731d298bf751b8c50252b17877a7308111ab7",
+          "bytes": 33273
+        },
+        {
+          "file": "frame_02.png",
+          "sha256": "34220c9cf9800ae5040048b1428f4b0a07b03dd36a9769cfba98ebf63dd0653f",
+          "bytes": 32843
+        },
+        {
+          "file": "frame_03.png",
+          "sha256": "06721a3f78ac3eb299a455293c3a4b205189433cbbda2c685949f275a230713a",
+          "bytes": 33942
+        },
+        {
+          "file": "frame_04.png",
+          "sha256": "dac9d87c40cf6674328fac39c216ac573fe1dbfc7780be4b3de2f1ed4fc7e3cf",
+          "bytes": 35343
+        },
+        {
+          "file": "frame_05.png",
+          "sha256": "0d5efc337a0c04aa2efa5bb1d6e9e997142879c9343469cbc2025d02ec9bdc78",
+          "bytes": 35459
+        },
+        {
+          "file": "frame_06.png",
+          "sha256": "7f730273b297d43ba94bc718e13161359fc4199a60082377bb20f6bca526c9ae",
+          "bytes": 35520
+        },
+        {
+          "file": "frame_07.png",
+          "sha256": "cd66918bc09a1b5c6a60451c932a4915a5980fee363f7ad0a00d27ae96fd4c6d",
+          "bytes": 34032
+        },
+        {
+          "file": "frame_08.png",
+          "sha256": "1aed4015664ae162e693f0c4aa9c5c3c2d80ec21ec37a28b1c3e686139f3dc1f",
+          "bytes": 32894
+        }
+      ]
+    }
+  ]
+}

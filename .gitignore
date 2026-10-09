@@ -1,0 +1,14 @@
+node_modules/
+dist/
+release/
+.wrangler/
+.env
+.env.*
+!.env.example
+.dev.vars
+*.log
+coverage/
+work/
+.DS_Store
+Thumbs.db
+desktop.ini

@@ -1,0 +1,18 @@
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "dafeyu-pet-chat",
+  "account_id": "e3a193fa4babf873645381c4f39fadd9",
+  "main": "worker/index.ts",
+  "compatibility_date": "2026-10-01",
+  "workers_dev": true,
+  "routes": [
+    {
+      "pattern": "dafeyu.tap041120.online",
+      "custom_domain": true,
+      "zone_id": "d6496fb0254ff1127935378cb2f91eca",
+    },
+  ],
+  "durable_objects": { "bindings": [{ "name": "ROOMS", "class_name": "PairRoom" }] },
+  "migrations": [{ "tag": "v1", "new_sqlite_classes": ["PairRoom"] }],
+  "observability": { "enabled": false },
+}

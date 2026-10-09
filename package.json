@@ -1,0 +1,67 @@
+{
+  "name": "dafeyu-pet-chat",
+  "version": "0.1.0",
+  "private": true,
+  "description": "铃宝：仅限双人的临时桌宠聊天",
+  "main": "dist/main/index.cjs",
+  "type": "module",
+  "scripts": {
+    "dev": "node scripts/dev.mjs",
+    "dev:ui": "vite --host 127.0.0.1",
+    "dev:server": "wrangler dev --ip 127.0.0.1 --port 8787",
+    "build": "node scripts/build.mjs",
+    "check": "tsc --noEmit && tsc --noEmit -p worker/tsconfig.json && node scripts/check-assets.mjs",
+    "test": "vitest run",
+    "test:integration": "node scripts/integration.mjs",
+    "test:desktop": "electron scripts/electron-smoke.cjs",
+    "test:desktop-network": "node scripts/desktop-network.mjs",
+    "package": "npm run build && electron-builder --win portable --x64",
+    "deploy": "wrangler deploy"
+  },
+  "dependencies": {
+    "https-proxy-agent": "^7.0.6",
+    "react": "^19.2.0",
+    "react-dom": "^19.2.0",
+    "ws": "^8.18.3"
+  },
+  "devDependencies": {
+    "@cloudflare/workers-types": "^5.20261009.1",
+    "@types/node": "^24.0.0",
+    "@types/react": "^19.2.0",
+    "@types/react-dom": "^19.2.0",
+    "@types/ws": "^8.18.0",
+    "@vitejs/plugin-react": "^5.1.0",
+    "electron": "^43.0.0",
+    "electron-builder": "^26.0.12",
+    "esbuild": "^0.25.0",
+    "prettier": "^3.9.9",
+    "typescript": "^5.9.3",
+    "vite": "^7.2.0",
+    "vitest": "^4.1.11",
+    "wrangler": "^4.103.0"
+  },
+  "build": {
+    "appId": "com.dafeyu.petchat",
+    "productName": "铃宝",
+    "asar": true,
+    "directories": {
+      "output": "release"
+    },
+    "files": [
+      "dist/**/*",
+      "package.json"
+    ],
+    "win": {
+      "target": [
+        "portable"
+      ],
+      "artifactName": "铃宝-${version}-win-x64.exe"
+    },
+    "portable": {
+      "requestExecutionLevel": "user"
+    }
+  },
+  "overrides": {
+    "@electron/get": "^5.1.0"
+  }
+}
