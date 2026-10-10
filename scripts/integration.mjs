@@ -210,6 +210,75 @@ try {
   await until(() => event(rejoined, (e) => e.type === 'ended'), 'cancel propagated');
   assert.equal((await post(`/v1/rooms/${code}/join`, randomBytes(32).toString('hex'))).status, 404);
   console.log('PASS stale-state rejection, disconnect/reconnect and cancellation');
+  // The authenticated socket must release the pair without a second HTTP request.
+  const makeRoom = async (connectGuest = true) => {
+    const token = randomBytes(32).toString('hex'),
+      other = randomBytes(32).toString('hex');
+    const created = await post('/v1/rooms', '', { token });
+    assert.equal(created.status, 200);
+    const code = created.body.code,
+      host = await connect(code, token);
+    assert.equal((await post(`/v1/rooms/${code}/join`, other)).status, 200);
+    const guest = connectGuest ? await connect(code, other) : null;
+    return { code, token, other, host, guest };
+  };
+  const exiting = await makeRoom();
+  exiting.guest.ws.send(JSON.stringify({ type: 'leave' }));
+  await until(
+    () => event(exiting.host, (e) => e.type === 'ended'),
+    'socket exit releases other party',
+  );
+  assert.equal(
+    (await post(`/v1/rooms/${exiting.code}/join`, randomBytes(32).toString('hex'))).status,
+    404,
+  );
+  console.log('PASS explicit socket exit frees pair immediately');
+  const abandoned = await makeRoom(),
+    incomplete = await makeRoom(false),
+    resumed = await makeRoom();
+  const keepAlive = setInterval(() => {
+    for (const client of clients)
+      if (client.ws.readyState === WebSocket.OPEN) client.ws.send(JSON.stringify({ type: 'ping' }));
+  }, 5000);
+  try {
+    abandoned.guest.ws.terminate();
+    resumed.guest.ws.terminate();
+    await until(() => resumed.host.state.peer === 'offline', 'short disconnect');
+    const recovered = await connect(resumed.code, resumed.other);
+    await until(() => recovered.state.effective === 'online', 'resume inside lease');
+    await until(
+      () =>
+        event(abandoned.host, (e) => e.type === 'ended') &&
+        event(incomplete.host, (e) => e.type === 'ended'),
+      '30-second abandoned-slot cleanup',
+      38000,
+    );
+    for (const room of [abandoned, incomplete]) {
+      assert.equal(
+        (await post(`/v1/rooms/${room.code}/join`, randomBytes(32).toString('hex'))).status,
+        404,
+      );
+    }
+    // Wait beyond the former reconnect deadline: recovery must cancel it.
+    await wait(1200);
+    assert.ok(!event(resumed.host, (e) => e.type === 'ended'));
+    const id = randomUUID();
+    recovered.ws.send(
+      JSON.stringify({ type: 'text', id, epoch: recovered.state.epoch, text: '重连保留会话' }),
+    );
+    await until(
+      () => event(resumed.host, (e) => e.id === id && e.type === 'text'),
+      'resumed room survives former deadline',
+    );
+    await post(`/v1/rooms/${resumed.code}/leave`, resumed.token);
+    console.log(
+      'PASS abandoned socket and incomplete join expire; recovered connection stays usable',
+    );
+  } finally {
+    clearInterval(keepAlive);
+    for (const room of [abandoned, incomplete, resumed])
+      await post(`/v1/rooms/${room.code}/leave`, room.token).catch(() => {});
+  }
   console.log(`All ${remote ? 'live Cloudflare' : 'local Worker'} integration checks passed.`);
 } catch (error) {
   console.error(error);

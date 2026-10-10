@@ -21,7 +21,7 @@ app.on('browser-window-created', (_event, win) => {
           '(async()=>({state:await window.pet.getState(),text:document.body.innerText,images:[...document.images].map(i=>({ready:i.complete,width:i.naturalWidth})),animation:(()=>{const c=document.querySelector("canvas.pet");return c?{ready:c.dataset.ready,width:c.width,height:c.height,action:c.dataset.action}:null})()}))()',
         );
         if (
-          result.text.includes('菜单') &&
+          !result.text.includes('菜单') &&
           result.animation?.ready === 'true' &&
           result.images.every((image) => image.ready && image.width > 0)
         )
@@ -33,10 +33,10 @@ app.on('browser-window-created', (_event, win) => {
       assert.equal(result.state.paired, false);
       if (process.env.DAFEYU_EXPECT_RELAY_URL)
         assert.equal(result.state.preferences.relayUrl, process.env.DAFEYU_EXPECT_RELAY_URL);
-      assert.ok(result.text.includes('菜单') && !result.text.includes('调整大小'));
+      assert.ok(!result.text.includes('菜单') && !result.text.includes('调整大小'));
       assert.equal(
         await win.webContents.executeJavaScript(
-          '!!document.querySelector(".quick-composer textarea") && !!document.querySelector(".resize-handle") && document.querySelector(".presence").getAttribute("aria-label")==="自己的状态：在线"',
+          '!document.querySelector(".quick-composer textarea") && !document.querySelector(".toolbar") && !!document.querySelector(".idle-cloud") && document.querySelectorAll(".idle-dots i").length===3',
         ),
         true,
       );

@@ -50,7 +50,7 @@ export class Relay extends EventEmitter {
     this.state.notice = text;
     this.changed();
   }
-  private async request(path: string, token: string, body?: unknown) {
+  private async request(path: string, token: string, body?: unknown, timeout = 12_000) {
     const url = normalizeRelay(this.state.preferences.relayUrl);
     const response = await net.fetch(url + path, {
       method: 'POST',
@@ -59,7 +59,7 @@ export class Relay extends EventEmitter {
         ...(token ? { Authorization: `Bearer ${token}` } : {}),
       },
       body: body ? JSON.stringify(body) : '{}',
-      signal: AbortSignal.timeout(12_000),
+      signal: AbortSignal.timeout(timeout),
       cache: 'no-store',
     });
     const data = await response.json();
@@ -363,7 +363,6 @@ export class Relay extends EventEmitter {
     clearTimeout(this.retry);
     const ws = this.socket;
     this.socket = undefined;
-    ws?.close(1000, 'Pair ended');
     this.failPending();
     this.seen.clear();
     Object.assign(this.state, {
@@ -377,8 +376,39 @@ export class Relay extends EventEmitter {
       notice: show ? '已取消配对' : '',
     });
     this.changed();
-    if (room && token && !remote)
-      await this.request(`/v1/rooms/${room}/leave`, token).catch(() => {});
+    if (room && token && !remote) {
+      // Reuse the authenticated connection and await the server's acknowledgement
+      // before quitting. HTTP is a bounded fallback, not a fire-and-forget request.
+      const released =
+        ws?.readyState === WebSocket.OPEN &&
+        (await new Promise<boolean>((resolve) => {
+          const done = (ok: boolean) => {
+            clearTimeout(timer);
+            ws.off('message', onMessage);
+            ws.off('close', onClose);
+            resolve(ok);
+          };
+          const onMessage = (data: WebSocket.RawData, binary: boolean) => {
+            if (binary) return;
+            try {
+              if (JSON.parse(data.toString()).type === 'ended') done(true);
+            } catch {}
+          };
+          const onClose = (code: number) => done(code === 4002);
+          const timer = setTimeout(() => done(false), 1200);
+          ws.on('message', onMessage);
+          ws.once('close', onClose);
+          try {
+            ws.send(JSON.stringify({ type: 'leave' }));
+          } catch {
+            done(false);
+          }
+        }));
+      if (!released)
+        await this.request(`/v1/rooms/${room}/leave`, token, undefined, 2500).catch(() => {});
+    }
+    if (ws?.readyState === WebSocket.OPEN) ws.close(1000, 'Pair ended');
+    else if (ws?.readyState === WebSocket.CONNECTING) ws.terminate();
   }
   reconnect() {
     if (this.socket) {

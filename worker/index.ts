@@ -20,6 +20,7 @@ interface RoomMeta {
   expires: number;
   epoch: number;
   touched: number;
+  reconnectBy?: Partial<Record<Role, number>>;
 }
 interface Attachment {
   role: Role;
@@ -32,7 +33,7 @@ interface Attachment {
   burstAt: number;
 }
 const INVITE_MS = 10 * 60_000;
-const RETENTION_MS = 7 * 86400_000;
+const RECONNECT_MS = 30_000;
 const tokenPattern = /^[a-f0-9]{64}$/;
 const alphabet = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
 function json(value: unknown, status = 200) {
@@ -187,9 +188,36 @@ export class PairRoom extends DurableObject<Env> {
   }
   private armAlarm() {
     if (!this.meta) return;
+    // A missing participant has a bounded reconnect lease, including a join
+    // whose socket handshake never completes. Older stored rooms migrate here.
+    this.refreshAbsences();
     const times = this.sockets().map((ws) => this.attachment(ws).seen + LEASE_MS);
-    const next = times.length ? Math.min(...times) : this.meta.touched + RETENTION_MS;
+    times.push(...Object.values(this.meta.reconnectBy || {}));
+    if (!this.meta.guest) times.push(this.meta.expires);
+    const next = Math.min(...times);
     this.ctx.waitUntil(this.ctx.storage.setAlarm(Math.max(Date.now() + 100, next)));
+  }
+  private refreshAbsences() {
+    if (!this.meta) return;
+    this.meta.reconnectBy ||= {};
+    let changed = false;
+    for (const role of ['host', 'guest'] as const) {
+      if (!this.meta[role]) continue;
+      const socket = this.sockets().find((ws) => this.attachment(ws).role === role);
+      if (!socket && !this.meta.reconnectBy[role]) {
+        this.meta.reconnectBy[role] = Date.now() + RECONNECT_MS;
+        changed = true;
+      }
+    }
+    if (changed) this.save();
+  }
+  private async expireIfNeeded() {
+    if (!this.meta) return;
+    this.refreshAbsences();
+    if (Object.values(this.meta.reconnectBy || {}).some((deadline) => deadline <= Date.now()))
+      await this.destroy('对方已离线，配对已解除，请重新配对');
+    else if (!this.meta.guest && this.meta.expires <= Date.now())
+      await this.destroy('配对码已过期，请重新生成');
   }
   async fetch(request: Request): Promise<Response> {
     const path = new URL(request.url).pathname,
@@ -207,6 +235,7 @@ export class PairRoom extends DurableObject<Env> {
       this.armAlarm();
       return json({ ok: true });
     }
+    await this.expireIfNeeded();
     if (!this.meta) return json({ error: '配对码不存在或已经取消' }, 404);
     if (path === '/join') {
       if (token === this.meta.host) return json({ error: '不能与自己配对' }, 409);
@@ -219,6 +248,7 @@ export class PairRoom extends DurableObject<Env> {
       this.meta.guest = token;
       this.bump();
       this.broadcast();
+      this.armAlarm();
       return json({ ok: true });
     }
     const role: Role | null =
@@ -246,6 +276,7 @@ export class PairRoom extends DurableObject<Env> {
         burstAt: Date.now(),
       } satisfies Attachment);
       this.ctx.acceptWebSocket(pair[1]);
+      if (this.meta.reconnectBy) delete this.meta.reconnectBy[role];
       this.bump();
       this.broadcast();
       this.armAlarm();
@@ -291,6 +322,10 @@ export class PairRoom extends DurableObject<Env> {
     }
     try {
       const message = JSON.parse(data);
+      if (message.type === 'leave') {
+        await this.destroy('对方已取消配对或退出程序');
+        return;
+      }
       if (message.type === 'ping') {
         this.send(ws, { type: 'pong' });
         this.broadcast();
@@ -364,11 +399,21 @@ export class PairRoom extends DurableObject<Env> {
       this.send(ws, { type: 'error', id, message: '对方连接已断开，消息未送达' });
     }
   }
-  webSocketClose(ws: WebSocket, code: number) {
+  async webSocketClose(ws: WebSocket, code: number, reason: string) {
     try {
       ws.close(code === 1005 ? 1000 : code, 'Connection closed');
     } catch {}
     if (this.meta) {
+      // Also release sessions from pre-1.0.1 clients that send only this close.
+      const role = this.attachment(ws).role;
+      if (
+        code === 1000 &&
+        reason === 'Pair ended' &&
+        !this.sockets().some((other) => this.attachment(other).role === role)
+      ) {
+        await this.destroy('对方已取消配对或退出程序');
+        return;
+      }
       this.bump();
       this.broadcast();
       this.armAlarm();
@@ -383,6 +428,7 @@ export class PairRoom extends DurableObject<Env> {
     this.armAlarm();
   }
   async alarm() {
+    await this.expireIfNeeded();
     if (!this.meta) return;
     let changed = false;
     for (const ws of this.sockets())
@@ -390,10 +436,6 @@ export class PairRoom extends DurableObject<Env> {
         ws.close(4003, 'Heartbeat timeout');
         changed = true;
       }
-    if (!this.sockets().length && Date.now() - this.meta.touched >= RETENTION_MS) {
-      await this.destroy('配对会话已过期');
-      return;
-    }
     if (changed) {
       this.bump();
       this.broadcast();

@@ -1,7 +1,8 @@
 export const MIN_SCALE = 0.55;
 export const MAX_SCALE = 1.35;
 export const PET_HEIGHT = 208;
-export const FOOTER_HEIGHT = 120;
+export const FOOTER_HEIGHT = 56;
+export const PET_TOP = 20;
 export type Rect = { x: number; y: number; width: number; height: number };
 export type LayoutRequest = {
   panel: { width: number; height: number } | null;
@@ -26,7 +27,7 @@ export function dragScale(initial: number, dx: number, dy: number) {
 export function scaleAtAnchor(value: number, anchor: { x: number; y: number }, area: Rect) {
   const horizontal =
     (2 * Math.min(anchor.x - area.x - 12, area.x + area.width - anchor.x - 12) - 32) / 416;
-  const vertical = (anchor.y - area.y - 48) / PET_HEIGHT;
+  const vertical = (anchor.y - area.y - PET_TOP - 12) / PET_HEIGHT;
   return clampScale(Math.min(value, horizontal, vertical));
 }
 
@@ -44,14 +45,14 @@ export function desktopLayout(
       clamp(anchor.x, area.x + bodyWidth / 2 + 12, area.x + area.width - bodyWidth / 2 - 12),
     ),
     y: Math.round(
-      clamp(anchor.y, area.y + petHeight + 48, area.y + area.height - FOOTER_HEIGHT - 12),
+      clamp(anchor.y, area.y + petHeight + PET_TOP + 12, area.y + area.height - FOOTER_HEIGHT - 12),
     ),
   };
   const body: Rect = {
     x: Math.round(center.x - bodyWidth / 2),
-    y: center.y - petHeight - 36,
+    y: center.y - petHeight - PET_TOP,
     width: bodyWidth,
-    height: petHeight + 36 + FOOTER_HEIGHT,
+    height: petHeight + PET_TOP + FOOTER_HEIGHT,
   };
   const maxPanelHeight = Math.min(520, area.height - 24);
   const fit = (rect: Rect): Rect => ({
@@ -74,14 +75,16 @@ export function desktopLayout(
   }
   let bubble: Rect | null = null;
   if (request.bubble) {
-    const width = Math.min(340, area.width - 24, Math.max(140, Math.ceil(request.bubble.width)));
-    const height = Math.min(260, area.height - 24, Math.max(70, Math.ceil(request.bubble.height)));
+    const width = Math.min(340, area.width - 24, Math.max(60, Math.ceil(request.bubble.width)));
+    const height = Math.min(260, area.height - 24, Math.max(40, Math.ceil(request.bubble.height)));
     const overlaps = (a: Rect, b: Rect) =>
       a.x < b.x + b.width && a.x + a.width > b.x && a.y < b.y + b.height && a.y + a.height > b.y;
+    // 趴姿脑袋位于人物左侧；云朵右下尾巴朝向脑袋，优先停在其左上。
+    const headX = center.x - petHeight * 0.42;
     const candidates = [
-      { x: center.x - width / 2, y: body.y - height - 8, width, height },
-      { x: body.x + body.width + 12, y: body.y, width, height },
+      { x: headX - width * 0.78, y: body.y - height - 2, width, height },
       { x: body.x - width - 12, y: body.y, width, height },
+      { x: body.x + body.width + 12, y: body.y, width, height },
       { x: center.x - width / 2, y: body.y + body.height + 8, width, height },
     ];
     bubble =

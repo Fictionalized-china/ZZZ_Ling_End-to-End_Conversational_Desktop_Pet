@@ -42,7 +42,9 @@ app.on('browser-window-created', (_event, win) => {
         observer.observe(canvas, {attributes:true, attributeFilter:['data-frame']});
         const start = canvas.dataset.startedAt;
         await wait(300);
-        [...document.querySelectorAll('.toolbar button')].find(b=>b.textContent.includes('状态')).click();
+        canvas.dispatchEvent(new MouseEvent('contextmenu',{bubbles:true}));
+        await wait(100);
+        document.querySelector('.presence').click();
         await wait(350);
         const menuChecks = [...document.querySelectorAll('.action-row [role="switch"]')].map(i=>i.getAttribute('aria-checked')==='true');
         document.querySelector('[aria-label="关闭弹窗"]').click();

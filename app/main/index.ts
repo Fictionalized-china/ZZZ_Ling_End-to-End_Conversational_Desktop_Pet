@@ -333,6 +333,6 @@ app.on('before-quit', (event) => {
   clearTimeout(saveTimer);
   void Promise.race([
     Promise.all([relay.cancel(false), save()]),
-    new Promise((resolve) => setTimeout(resolve, 1800)),
+    new Promise((resolve) => setTimeout(resolve, 4500)),
   ]).finally(() => app.quit());
 });

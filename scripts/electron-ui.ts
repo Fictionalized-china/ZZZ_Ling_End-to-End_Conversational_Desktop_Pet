@@ -48,6 +48,16 @@ app.on('browser-window-created', (_event, win: BrowserWindow) => {
         await wait(120);
       };
       const toolbar = async (name: string) => {
+        if (!(await exists('.toolbar'))) {
+          await js(
+            `document.querySelector('canvas.pet').dispatchEvent(new MouseEvent('contextmenu',{bubbles:true}))`,
+          );
+          await wait(100);
+        }
+        if (name === '状态') {
+          await click('.presence');
+          return;
+        }
         await js(
           `[...document.querySelectorAll('.toolbar button')].find(b=>b.textContent.includes(${JSON.stringify(name)})).click()`,
         );
@@ -82,7 +92,12 @@ app.on('browser-window-created', (_event, win: BrowserWindow) => {
       );
       const base = await anchor();
       positions.initial = base;
-      assert.equal(await exists('.quick-composer textarea'), true);
+      assert.equal(await exists('.quick-composer textarea'), false);
+      assert.equal(await exists('.toolbar'), false);
+      assert.equal(await exists('.idle-cloud'), true);
+      await capture('ui-idle');
+      await toolbar('菜单');
+      await click('[aria-label="关闭弹窗"]');
       assert.equal(
         await js(`document.querySelector('.presence').getAttribute('aria-label')`),
         '自己的状态：在线',
@@ -205,6 +220,8 @@ app.on('browser-window-created', (_event, win: BrowserWindow) => {
       await js('window.pet.setScale(1)');
       await wait(150);
       await stable('resize-reset', middle);
+      await click('[aria-label="收起操作栏"]');
+      await capture('ui-idle');
       console.log(
         'PASS native UI: own status, sliding switches, anchored panels and continuous hold-drag resize',
       );
@@ -240,15 +257,21 @@ app.on('browser-window-created', (_event, win: BrowserWindow) => {
       );
       await click('[aria-label="关闭弹窗"]');
       await stable('pair-and-close', middle);
+      await click('[aria-label="收起操作栏"]');
+      await click('[aria-label="打开快捷聊天"]');
+      assert.equal(await exists('.quick-panel'), true);
+      await capture('ui-quick');
+      await stable('quick-open', middle);
       await js(
-        `(()=>{const input=document.querySelector('.quick-composer textarea');Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype,'value').set.call(input,'常驻输入框发送测试');input.dispatchEvent(new Event('input',{bubbles:true}));})()`,
+        `(()=>{const input=document.querySelector('.quick-composer textarea');Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype,'value').set.call(input,'快捷输入框发送测试');input.dispatchEvent(new Event('input',{bubbles:true}));})()`,
       );
       await wait(80);
       await click('[aria-label="发送消息"]');
       await until(
-        () => guest!.state.messages.some((m) => m.text === '常驻输入框发送测试'),
+        () => guest!.state.messages.some((m) => m.text === '快捷输入框发送测试'),
         'quick send',
       );
+      await click('[aria-label="关闭弹窗"]');
       assert.equal(await exists('.floating-panel'), false);
       guest.sendText('第一条：在桌面上就能聊天。');
       const first = guest.state.messages.at(-1)!.id;
@@ -275,84 +298,109 @@ app.on('browser-window-created', (_event, win: BrowserWindow) => {
       const png = fs.readFileSync('assets/pet/lounge/frame_01.png');
       guest.sendImage(png, 448, 456);
       const third = guest.state.messages.at(-1)!.id;
-      await until(() => exists('.speech-bubble.fading'), 'fade starts');
-      await wait(500);
-      const fading = await js(
-        `(()=>{const b=document.querySelector('.speech-bubble');return {id:b.dataset.messageId,opacity:Number(getComputedStyle(b).opacity),count:document.querySelectorAll('.speech-bubble').length}})()`,
+      await until(() => exists('.speech-bubble.changing'), 'content transition starts');
+      assert.equal(await js(`document.querySelector('.speech-bubble').dataset.messageId`), first);
+      assert.equal(
+        await js(`Number(getComputedStyle(document.querySelector('.speech-bubble')).opacity)`),
+        1,
       );
-      assert.equal(fading.id, first);
-      assert.equal(fading.count, 1);
-      assert.ok(fading.opacity > 0 && fading.opacity < 1);
       await until(
         () =>
           js(
             `document.querySelector('.speech-bubble')?.dataset.messageId===${JSON.stringify(second)}`,
           ),
-        'second after fade',
+        'second after three seconds',
       );
       const elapsed = Date.now() - started;
-      assert.ok(elapsed >= 1900 && elapsed < 3500, `Fade timing ${elapsed}ms`);
+      assert.ok(elapsed >= 2900 && elapsed < 4000, `Replacement timing ${elapsed}ms`);
       const longSize = await js(
-        `(()=>{const b=document.querySelector('.speech-bubble'),c=document.querySelector('.speech-content'),r=b.getBoundingClientRect();return {width:r.width,height:r.height,scroll:c.scrollHeight,client:c.clientHeight}})()`,
+        `(()=>{const b=document.querySelector('.speech-bubble'),c=document.querySelector('.speech-content'),r=b.getBoundingClientRect(),i=c.getBoundingClientRect();return {width:r.width,height:r.height,scroll:c.scrollHeight,client:c.clientHeight,insets:[i.left-r.left,r.right-i.right,i.top-r.top,r.bottom-i.bottom]}})()`,
       );
-      assert.ok(
-        longSize.width <= 320 && longSize.height <= 220 && longSize.scroll > longSize.client,
-      );
-      assert.ok(longSize.height > shortSize.height);
+      assert.equal(longSize.width, shortSize.width);
+      assert.equal(longSize.height, shortSize.height);
+      assert.equal(longSize.width, 296);
+      assert.equal(longSize.height, 184);
+      assert.ok(longSize.scroll > longSize.client);
+      assert.deepEqual(longSize.insets, [48, 48, 44, 66]);
+      await wait(300);
+      await capture('ui-long-bubble');
+      await js(`document.querySelector('.speech-content').scrollTop=100`);
+      assert.ok(await js(`document.querySelector('.speech-content').scrollTop>0`));
       await stable('long-bubble', middle);
       await until(
         () =>
           js(
             `document.querySelector('.speech-bubble')?.dataset.messageId===${JSON.stringify(third)}`,
           ),
-        'image after second fade',
+        'image placeholder after three seconds',
       );
-      await until(
-        () => js(`document.querySelector('.bubble-image img')?.complete===true`),
-        'bubble image loaded',
-      );
-      await until(
-        () =>
-          js(
-            `(()=>{const b=document.querySelector('.speech-bubble'),r=b.getBoundingClientRect(),p=document.querySelector('.pet-zone').getBoundingClientRect();return getComputedStyle(b).visibility==='visible' && (r.bottom<=p.top||r.right<=p.left||r.left>=p.right||r.top>=p.bottom)})()`,
-          ),
-        'image bubble settled without overlapping character',
-      );
-      assert.equal(await exists('.floating-panel'), false);
+      assert.equal(await js(`document.querySelector('.speech-content').innerText`), '【图片信息】');
+      assert.equal(await exists('.speech-content img'), false);
       await stable('image-bubble', middle);
+      await wait(300);
       await capture('ui-image-bubble');
-      const imageSize = await js(
-        `(()=>{const r=document.querySelector('.bubble-image img').getBoundingClientRect();return {width:r.width,height:r.height}})()`,
+      await until(() => exists('.speech-bubble.fading'), 'four-second fade');
+      await wait(500);
+      const fadingOpacity = await js(
+        `Number(getComputedStyle(document.querySelector('.speech-bubble')).opacity)`,
       );
-      assert.ok(imageSize.width <= 200 && imageSize.height <= 140);
-      await click('[aria-label="查看收到的图片"]');
+      assert.ok(fadingOpacity > 0 && fadingOpacity < 1);
+      await until(() => exists('.idle-cloud'), 'six-second idle return');
+      assert.equal(await exists('.speech-bubble'), false);
+      await stable('idle-return', middle);
+      await js(
+        `document.querySelector('canvas.pet').dispatchEvent(new MouseEvent('dblclick',{bubbles:true}))`,
+      );
+      await until(() => exists('.chat-panel textarea'), 'double-click full chat');
+      await stable('full-chat', middle);
+      assert.equal(await js(`document.querySelectorAll('.messages .message').length`), 4);
+      await until(
+        () => js(`document.querySelector('.message-image img')?.complete===true`),
+        'history image',
+      );
+      await wait(150);
+      const imageInChat = await js(
+        `(()=>{const i=document.querySelector('.message-image img').getBoundingClientRect(),m=document.querySelector('.messages').getBoundingClientRect();return i.height>0 && i.bottom<=m.bottom && i.top>=m.top})()`,
+      );
+      assert.equal(imageInChat, true, 'Newest image must be visible inside full chat');
+      await capture('ui-history');
+      await click('[aria-label="查看图片"]');
       await stable('image-preview', middle);
       await click('[aria-label="关闭图片预览"]');
       await stable('preview-close', middle);
-      await click('[aria-label="打开对话记录"]');
-      await stable('history', middle);
-      assert.equal(await exists('.speech-bubble'), false);
-      assert.equal(await js(`document.querySelectorAll('.messages .message').length`), 4);
-      await capture('ui-history');
-      await click('[aria-label="关闭弹窗"]');
-      await wait(300);
-      assert.equal(await exists('.speech-bubble'), false);
+      await js(
+        `(()=>{const input=document.querySelector('.chat-panel textarea');Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype,'value').set.call(input,'完整聊天窗口也能发送');input.dispatchEvent(new Event('input',{bubbles:true}));})()`,
+      );
+      await wait(80);
+      await click('[aria-label="发送消息"]');
+      await until(
+        () => guest!.state.messages.some((m) => m.text === '完整聊天窗口也能发送'),
+        'full chat send',
+      );
       guest.setStatus('busy');
       await until(async () => (await state()).effective === 'busy', 'peer busy');
+      assert.equal(await js(`document.querySelector('.quick-send').disabled`), true);
+      await toolbar('状态');
       assert.equal(
         await js(`document.querySelector('.presence').getAttribute('aria-label')`),
         '自己的状态：在线',
       );
-      assert.equal(await js(`document.querySelector('.quick-send').disabled`), true);
+      await click('[aria-label="关闭弹窗"]');
+      await js(`window.dispatchEvent(new KeyboardEvent('keydown',{key:'Escape'}))`);
+      await wait(80);
+      assert.equal(await exists('.toolbar'), false);
+      assert.equal(await exists('.quick-composer'), false);
       guest.setStatus('online');
       await until(async () => (await state()).effective === 'online', 'peer online');
-      guest.sendText('取消配对时也应清除正在淡出的消息。');
+      guest.sendText('取消配对时也应清除正在切换的消息。');
       await until(() => exists('.speech-bubble'), 'new bubble after history');
       guest.sendText('尚未显示的消息。');
-      await until(() => exists('.speech-bubble.fading'), 'cancel during fade');
-      await js('window.pet.cancelPair()');
-      await wait(2300);
+      await until(() => exists('.speech-bubble.changing'), 'cancel during transition');
+      await guest.cancel(false);
+      await until(async () => !(await state()).code, 'peer exit releases pair');
+      await wait(350);
       assert.equal(await exists('.speech-bubble'), false);
+      assert.equal(await exists('.idle-cloud'), true);
       assert.equal((await state()).messages.length, 0);
       const saved = JSON.parse(fs.readFileSync(path.join(profile, 'preferences.json'), 'utf8'));
       assert.ok(Number.isFinite(saved.anchorX) && Number.isFinite(saved.anchorY));
@@ -364,12 +412,11 @@ app.on('browser-window-created', (_event, win: BrowserWindow) => {
             passed: true,
             positions,
             draggedScale,
-            fadeMilliseconds: elapsed,
-            fadingOpacity: fading.opacity,
+            replacementMilliseconds: elapsed,
+            fadingOpacity,
             shortSize,
             longSize,
-            imageSize,
-            historyCount: 4,
+            historyCount: 5,
             relay: 'local real Worker',
             electron: process.versions.electron,
           },
@@ -378,7 +425,7 @@ app.on('browser-window-created', (_event, win: BrowserWindow) => {
         ),
       );
       console.log(
-        'PASS real Worker + production Electron UI: quick send, 2-second FIFO text/image bubbles, bounded wrapping, history, busy gate and cancellation cleanup',
+        'PASS real Worker + production Electron UI: hidden controls, quick/full chat, 3/4/6-second fixed bubbles, image placeholder, scrolling, busy gate and peer exit cleanup',
       );
       clearTimeout(timeout);
       await guest.cancel(false);
