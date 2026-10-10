@@ -45,7 +45,7 @@ try {
     windowsHide: true,
     env: { ...process.env, DAFEYU_RELAY_URL: 'http://127.0.0.1:8790' },
   });
-  const timer = setTimeout(() => client.kill(), 60000);
+  const timer = setTimeout(() => client.kill(), 70000);
   const code = await new Promise((resolve) => client.on('exit', resolve));
   clearTimeout(timer);
   if (code !== 0) throw Error(`Desktop UI test failed (${code})`);

@@ -758,27 +758,77 @@ h2 {
   margin-left: auto;
 }
 .quick-panel {
-  width: 280px;
-  border-radius: 16px;
+  width: 240px;
+  overflow: visible;
+  border: 1px solid #20252a40;
+  border-radius: 12px;
+  background-color: #fffdf448;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='96' height='96'%3E%3Cfilter id='grain'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.85' numOctaves='3' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' opacity='.035' filter='url(%23grain)'/%3E%3C/svg%3E");
+  box-shadow: 0 2px 7px #161c2010;
+  transition: background-color 0.18s ease;
 }
-.quick-panel header {
-  padding: 10px 12px 6px;
-  border: 0;
-}
-.quick-panel .eyebrow {
-  display: none;
-}
-.quick-panel h1 {
-  font-size: 13px;
-  margin: 0;
-  letter-spacing: 0;
+.quick-panel:focus-within {
+  background-color: #fffdf480;
 }
 .quick-panel .panel-body {
-  padding: 0 10px 10px;
+  padding: 0;
+  overflow: visible;
 }
 .compact-composer .quick-composer {
   margin: 0;
+  min-height: 40px;
+  height: auto;
+  padding: 5px;
+  gap: 3px;
+  border: 0;
+  border-radius: 12px;
+  background: transparent;
   box-shadow: none;
+}
+.compact-composer .icon-button,
+.compact-composer .quick-send {
+  width: 22px;
+  height: 24px;
+  padding: 3px;
+  border: 1px solid #20252a30;
+  border-radius: 6px;
+  color: #22272b;
+  background: transparent;
+}
+.compact-composer button svg {
+  stroke-width: 1.25;
+}
+.compact-composer button:hover:not(:disabled) {
+  background: #fffdf455;
+  border-color: #20252a70;
+}
+.compact-composer textarea {
+  height: 26px;
+  max-height: 44px;
+  padding: 4px 2px;
+  border-bottom: 1px solid #20252a30;
+  border-radius: 0;
+  color: #20252a;
+  caret-color: #20252a;
+  scrollbar-width: none;
+}
+.compact-composer textarea::placeholder {
+  color: #20252a80;
+}
+.compact-composer :focus-visible {
+  outline: 1px solid #20252a88;
+  outline-offset: 1px;
+}
+.compact-composer .quick-hint {
+  display: none;
+}
+.compact-composer .quick-hint.has-error {
+  display: block;
+  height: auto;
+  margin: 0 6px 5px;
+  white-space: normal;
+  text-shadow: none;
+  color: #703d35;
 }
 .speech-bubble,
 .idle-cloud {
@@ -786,8 +836,8 @@ h2 {
   z-index: 3;
 }
 .idle-cloud {
-  width: 88px;
-  height: 62px;
+  width: calc(88px * var(--bubble-ratio));
+  height: calc(62px * var(--bubble-ratio));
 }
 .idle-cloud-button {
   position: relative;
@@ -809,12 +859,12 @@ h2 {
   top: 43%;
   transform: translate(-50%, -50%);
   display: flex;
-  gap: 5px;
+  gap: calc(5px * var(--bubble-ratio));
   pointer-events: none;
 }
 .idle-dots i {
-  width: 4px;
-  height: 4px;
+  width: calc(4px * var(--bubble-ratio));
+  height: calc(4px * var(--bubble-ratio));
   border-radius: 50%;
   background: #25386b;
   animation: idle-dot 1.2s ease-in-out infinite;
@@ -832,12 +882,10 @@ h2 {
     transform: translateY(0);
   }
   30% {
-    transform: translateY(-4px);
+    transform: translateY(calc(-4px * var(--bubble-ratio)));
   }
 }
 .speech-bubble {
-  width: 296px;
-  height: 184px;
   opacity: 1;
   transition: opacity 0.2s ease;
 }
@@ -869,23 +917,33 @@ h2 {
   left: -2.1505%;
   top: -17.0213%;
 }
-/* A fixed inner viewport stays inside the cream fill, including while scrolling. */
+/* Percent insets follow the cream fill at every bubble size. */
 .speech-content {
   position: absolute;
-  left: 48px;
-  right: 48px;
-  top: 44px;
-  bottom: 66px;
+  left: var(--bubble-left);
+  right: var(--bubble-right);
+  top: var(--bubble-top);
+  bottom: var(--bubble-bottom);
   min-height: 0;
   overflow-y: auto;
   overflow-x: hidden;
-  scrollbar-width: thin;
-  scrollbar-color: #a8aaab transparent;
+  scrollbar-width: auto;
   user-select: text;
   contain: paint;
   clip-path: inset(0 round 6px);
   transition: opacity 0.25s ease;
   animation: content-appear 0.25s ease;
+}
+.speech-content::-webkit-scrollbar {
+  width: 3px;
+}
+.speech-content::-webkit-scrollbar-thumb {
+  background: #7f858577;
+  border-radius: 3px;
+}
+.speech-content::-webkit-scrollbar-button {
+  display: none;
+  height: 0;
 }
 .speech-bubble.changing .speech-content {
   opacity: 0;
@@ -900,35 +958,42 @@ h2 {
 }
 .speech-text {
   margin: 0;
-  line-height: 1.55;
-  font-size: 12px;
+  line-height: 1.35;
+  font-size: var(--bubble-font);
   white-space: pre-wrap;
   overflow-wrap: anywhere;
 }
 .bubble-close {
   position: absolute;
-  top: 22px;
-  right: 38px;
+  top: -4px;
+  right: 6%;
   display: grid;
   place-items: center;
-  width: 20px;
-  height: 20px;
+  width: 18px;
+  height: 18px;
   padding: 0;
   border-radius: 50%;
   color: #405164;
   background: #fff8e2cc;
   z-index: 1;
+  opacity: 0;
+  pointer-events: none;
+}
+.speech-bubble:hover .bubble-close,
+.speech-bubble:focus-within .bubble-close {
+  opacity: 1;
+  pointer-events: auto;
 }
 .bubble-close:hover {
   background: #eedfb7;
 }
 .image-notice {
+  margin: 0;
   padding: 0;
   color: #344d78;
   background: transparent;
-  font-size: 12px;
-  line-height: 1.55;
-  text-decoration: underline;
+  font-size: var(--bubble-font);
+  line-height: 1.35;
 }
 @media (prefers-reduced-motion: reduce) {
   * {

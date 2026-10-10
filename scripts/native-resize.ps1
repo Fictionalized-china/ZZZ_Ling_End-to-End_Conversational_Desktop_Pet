@@ -8,11 +8,14 @@ public static class PetTestMouse {
   [DllImport("user32.dll")] public static extern bool GetCursorPos(out Point point);
   [DllImport("user32.dll")] public static extern bool SetCursorPos(int x, int y);
   [DllImport("user32.dll")] public static extern IntPtr GetForegroundWindow();
+  [DllImport("user32.dll")] public static extern bool SetForegroundWindow(IntPtr window);
   [DllImport("user32.dll")] public static extern void mouse_event(uint flags, uint dx, uint dy, uint data, UIntPtr extra);
   [DllImport("user32.dll")] public static extern IntPtr SetThreadDpiAwarenessContext(IntPtr value);
 }
 '@
 $null = [PetTestMouse]::SetThreadDpiAwarenessContext([IntPtr](-4))
+$null = [PetTestMouse]::SetForegroundWindow([IntPtr]$Window)
+Start-Sleep -Milliseconds 150
 if ([PetTestMouse]::GetForegroundWindow().ToInt64() -ne $Window) { throw 'Test window lost focus' }
 $original = New-Object PetTestMouse+Point
 $null = [PetTestMouse]::GetCursorPos([ref]$original)

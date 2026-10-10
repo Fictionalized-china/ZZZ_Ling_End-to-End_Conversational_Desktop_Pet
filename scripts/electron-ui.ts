@@ -36,18 +36,34 @@ async function until(check: () => Promise<boolean> | boolean, label: string, tim
 const timeout = setTimeout(() => {
   console.error('Desktop UI test timed out');
   app.exit(1);
-}, 50000);
+}, 60000);
 app.on('browser-window-created', (_event, win: BrowserWindow) => {
+  win.webContents.on('console-message', (event) => {
+    if (event.level === 'error') console.error('Renderer:', event.message);
+  });
   win.webContents.once('did-finish-load', async () => {
     let guest: Relay | undefined;
     try {
-      const js = (code: string) => win.webContents.executeJavaScript(code);
+      const js = async (code: string) => {
+        try {
+          return await win.webContents.executeJavaScript(code);
+        } catch (error) {
+          console.error('Failed UI step:', code);
+          throw error;
+        }
+      };
       const state = (): Promise<AppState> => js('window.pet.getState()');
       const exists = (selector: string) =>
         js(`!!document.querySelector(${JSON.stringify(selector)})`);
       const click = async (selector: string) => {
         await js(`document.querySelector(${JSON.stringify(selector)}).click()`);
         await wait(120);
+      };
+      const doubleClick = async (selector: string) => {
+        await js(
+          `document.querySelector(${JSON.stringify(selector)}).dispatchEvent(new MouseEvent('dblclick', {bubbles:true}))`,
+        );
+        await wait(150);
       };
       const toolbar = async (name: string) => {
         if (!(await exists('.toolbar'))) {
@@ -164,7 +180,7 @@ app.on('browser-window-created', (_event, win: BrowserWindow) => {
       assert.equal(controlsInside, true);
       await capture('ui-taskbar-controls');
       await click('[aria-label="关闭弹窗"]');
-      await click('[aria-label="打开快捷聊天"]');
+      await doubleClick('[aria-label="打开快捷聊天"]');
       await stable('taskbar-quick', atTaskbar);
       await click('[aria-label="关闭弹窗"]');
       await toolbar('状态');
@@ -183,38 +199,108 @@ app.on('browser-window-created', (_event, win: BrowserWindow) => {
         globalY = bounds.y + Math.round(handle.y);
       win.setIgnoreMouseEvents(false);
       win.focus();
-      // sendInputEvent 不会按下 Windows 的真实鼠标键；窗口移动时系统发来的
-      // buttons=0 会取消合成事件的 capture。这里用一次真正的按住/移动/释放。
-      const nativeStart = screen.dipToScreenPoint({ x: globalX, y: globalY });
-      const dpiScale = screen.getDisplayNearestPoint({ x: globalX, y: globalY }).scaleFactor;
-      scaleEvents.length = 0;
-      await promisify(execFile)(
-        'powershell.exe',
-        [
-          '-NoProfile',
-          '-ExecutionPolicy',
-          'Bypass',
-          '-File',
-          path.resolve('scripts/native-resize.ps1'),
-          '-X',
-          String(nativeStart.x),
-          '-Y',
-          String(nativeStart.y),
-          '-DpiScale',
-          String(dpiScale),
-          '-Window',
-          win.getNativeWindowHandle().readBigUInt64LE().toString(),
-        ],
-        { windowsHide: true, timeout: 10000 },
+      let draggedScale: number;
+      await js(
+        `window.__pointerLog=[];for(const name of ['pointerdown','pointermove','pointerup','lostpointercapture'])document.addEventListener(name,e=>window.__pointerLog.push({name,buttons:e.buttons,target:e.target.className,screenX:e.screenX,screenY:e.screenY,clientX:e.clientX,clientY:e.clientY}));`,
       );
-      await wait(150);
-      const draggedScale = (await state()).preferences.scale;
-      const dragSteps = [...new Set(scaleEvents.filter((value) => value > 1))];
-      assert.ok(draggedScale > 1 && draggedScale < 1.35, `Native drag scale ${draggedScale}`);
-      assert.ok(
-        dragSteps.length >= 2 && dragSteps.at(-1)! > dragSteps[0],
-        `Pointer capture must survive resizing: ${JSON.stringify(dragSteps)}`,
-      );
+      if (process.platform === 'win32' && process.env.DAFEYU_TEST_NATIVE_MOUSE !== '0') {
+        const nativeStart = screen.dipToScreenPoint({ x: globalX, y: globalY });
+        const dpiScale = screen.getDisplayNearestPoint({ x: globalX, y: globalY }).scaleFactor;
+        scaleEvents.length = 0;
+        await promisify(execFile)(
+          'powershell.exe',
+          [
+            '-NoProfile',
+            '-ExecutionPolicy',
+            'Bypass',
+            '-File',
+            path.resolve('scripts/native-resize.ps1'),
+            '-X',
+            String(nativeStart.x),
+            '-Y',
+            String(nativeStart.y),
+            '-DpiScale',
+            String(dpiScale),
+            '-Window',
+            win.getNativeWindowHandle().readBigUInt64LE().toString(),
+          ],
+          { windowsHide: true, timeout: 10000 },
+        );
+        await wait(150);
+        draggedScale = (await state()).preferences.scale;
+        const steps = [...new Set(scaleEvents.filter((value) => value > 1))];
+        assert.ok(
+          draggedScale > 1 && draggedScale < 1.5,
+          JSON.stringify({
+            draggedScale,
+            steps,
+            handle,
+            bounds,
+            events: await js('window.__pointerLog'),
+          }),
+        );
+        assert.ok(steps.length >= 2 && steps.at(-1)! > steps[0], JSON.stringify(steps));
+      } else {
+        win.webContents.sendInputEvent({
+          type: 'mouseMove',
+          x: Math.round(handle.x),
+          y: Math.round(handle.y),
+          globalX,
+          globalY,
+        });
+        await wait(50);
+        win.webContents.sendInputEvent({
+          type: 'mouseDown',
+          x: Math.round(handle.x),
+          y: Math.round(handle.y),
+          globalX,
+          globalY,
+          button: 'left',
+          clickCount: 1,
+        });
+        await wait(240);
+        win.webContents.sendInputEvent({
+          type: 'mouseMove',
+          x: Math.round(handle.x) - 20,
+          y: Math.round(handle.y) - 30,
+          globalX: globalX - 20,
+          globalY: globalY - 30,
+          button: 'left',
+          modifiers: ['leftButtonDown'],
+        });
+        await wait(120);
+        const firstDragScale = (await state()).preferences.scale;
+        const secondBounds = win.getBounds();
+        win.webContents.sendInputEvent({
+          type: 'mouseMove',
+          x: globalX - 36 - secondBounds.x,
+          y: globalY - 48 - secondBounds.y,
+          globalX: globalX - 36,
+          globalY: globalY - 48,
+          button: 'left',
+          modifiers: ['leftButtonDown'],
+        });
+        await wait(120);
+        const movedBounds = win.getBounds();
+        win.webContents.sendInputEvent({
+          type: 'mouseUp',
+          x: globalX - 36 - movedBounds.x,
+          y: globalY - 48 - movedBounds.y,
+          globalX: globalX - 36,
+          globalY: globalY - 48,
+          button: 'left',
+          clickCount: 1,
+        });
+        await wait(150);
+        draggedScale = (await state()).preferences.scale;
+        if (draggedScale <= firstDragScale)
+          console.log('Resize input diagnostics:', await js('window.__pointerLog'), scaleEvents);
+        assert.ok(draggedScale > 1 && draggedScale < 1.35, `Native drag scale ${draggedScale}`);
+        assert.ok(
+          draggedScale > firstDragScale,
+          'Pointer capture must survive resizing for continuous drag',
+        );
+      }
       await stable('native-resize', middle);
       await js('window.pet.setScale(1)');
       await wait(150);
@@ -258,7 +344,16 @@ app.on('browser-window-created', (_event, win: BrowserWindow) => {
       await stable('pair-and-close', middle);
       await click('[aria-label="收起操作栏"]');
       await click('[aria-label="打开快捷聊天"]');
+      assert.equal(await exists('.quick-panel'), false, 'Single click must not open quick chat');
+      await doubleClick('[aria-label="打开快捷聊天"]');
       assert.equal(await exists('.quick-panel'), true);
+      const quickStyle = await js(
+        `(()=>{const p=document.querySelector('.quick-panel'),r=p.getBoundingClientRect(),b=getComputedStyle(p),t=getComputedStyle(p.querySelector('.quick-send'));return {width:r.width,height:r.height,background:b.backgroundColor,send:t.backgroundColor,header:!!p.querySelector('header')}})()`,
+      );
+      assert.equal(quickStyle.width, 240);
+      assert.ok(quickStyle.height <= 60);
+      assert.equal(quickStyle.header, false);
+      assert.equal(quickStyle.send, 'rgba(0, 0, 0, 0)');
       await capture('ui-quick');
       await stable('quick-open', middle);
       await js(
@@ -272,7 +367,9 @@ app.on('browser-window-created', (_event, win: BrowserWindow) => {
       );
       await click('[aria-label="关闭弹窗"]');
       assert.equal(await exists('.floating-panel'), false);
-      guest.sendText('第一条：在桌面上就能聊天。');
+      await js('window.pet.setScale(0.55)');
+      await wait(180);
+      guest.sendText('好');
       const first = guest.state.messages.at(-1)!.id;
       await until(
         () =>
@@ -315,12 +412,31 @@ app.on('browser-window-created', (_event, win: BrowserWindow) => {
       const longSize = await js(
         `(()=>{const b=document.querySelector('.speech-bubble'),c=document.querySelector('.speech-content'),r=b.getBoundingClientRect(),i=c.getBoundingClientRect();return {width:r.width,height:r.height,scroll:c.scrollHeight,client:c.clientHeight,insets:[i.left-r.left,r.right-i.right,i.top-r.top,r.bottom-i.bottom]}})()`,
       );
-      assert.equal(longSize.width, shortSize.width);
-      assert.equal(longSize.height, shortSize.height);
-      assert.equal(longSize.width, 296);
-      assert.equal(longSize.height, 184);
+      assert.equal(shortSize.width, 88);
+      assert.equal(shortSize.height, 62);
+      assert.equal(longSize.width, 148);
+      assert.equal(longSize.height, 92);
       assert.ok(longSize.scroll > longSize.client);
-      assert.deepEqual(longSize.insets, [48, 48, 44, 66]);
+      for (let i = 0; i < 4; i++)
+        assert.ok(Math.abs(longSize.insets[i] - [24, 24, 22, 33][i]) < 0.1);
+      const scaledBubbles = [];
+      for (const [scale, width, height] of [
+        [0.25, 67, 42],
+        [1, 269, 167],
+        [1.5, 404, 251],
+      ]) {
+        await js(`window.pet.setScale(${scale})`);
+        await wait(170);
+        const actual = await js(
+          `(()=>{const b=document.querySelector('.speech-bubble'),r=b.getBoundingClientRect();return {width:r.width,height:r.height,visible:getComputedStyle(b).visibility}})()`,
+        );
+        assert.deepEqual(actual, { width, height, visible: 'visible' });
+        await stable('bubble-scale-' + scale, middle);
+        scaledBubbles.push({ scale, ...actual });
+        await capture('ui-scale-' + scale);
+      }
+      await js('window.pet.setScale(0.55)');
+      await wait(170);
       await wait(300);
       await capture('ui-long-bubble');
       await js(`document.querySelector('.speech-content').scrollTop=100`);
@@ -347,6 +463,17 @@ app.on('browser-window-created', (_event, win: BrowserWindow) => {
       await until(() => exists('.idle-cloud'), 'six-second idle return');
       assert.equal(await exists('.speech-bubble'), false);
       await stable('idle-return', middle);
+      await doubleClick('[aria-label="打开快捷聊天"]');
+      await js(
+        `(()=>{const input=document.querySelector('.quick-panel textarea');Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype,'value').set.call(input,'保留草稿');input.dispatchEvent(new Event('input',{bubbles:true}));})()`,
+      );
+      await wait(80);
+      await js(`window.dispatchEvent(new Event('blur'))`);
+      await wait(80);
+      assert.equal(await exists('.quick-panel'), false);
+      await doubleClick('[aria-label="打开快捷聊天"]');
+      assert.equal(await js(`document.querySelector('.quick-panel textarea').value`), '保留草稿');
+      await click('[aria-label="关闭弹窗"]');
       await js(
         `document.querySelector('canvas.pet').dispatchEvent(new MouseEvent('dblclick',{bubbles:true}))`,
       );
@@ -416,6 +543,8 @@ app.on('browser-window-created', (_event, win: BrowserWindow) => {
             fadingOpacity,
             shortSize,
             longSize,
+            scaledBubbles,
+            quickStyle,
             historyCount: 5,
             relay: 'local real Worker',
             electron: process.versions.electron,
@@ -425,7 +554,7 @@ app.on('browser-window-created', (_event, win: BrowserWindow) => {
         ),
       );
       console.log(
-        'PASS real Worker + production Electron UI: hidden controls, quick/full chat, 3/4/6-second fixed bubbles, image placeholder, scrolling, busy gate and peer exit cleanup',
+        'PASS real Worker + production Electron UI: hidden controls, quick/full chat, 3/4/6-second adaptive scaled bubbles, image placeholder, scrolling, busy gate and peer exit cleanup',
       );
       clearTimeout(timeout);
       await guest.cancel(false);

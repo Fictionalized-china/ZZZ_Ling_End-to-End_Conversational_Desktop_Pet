@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { desktopLayout, dragScale, scaleAtAnchor, clampScale } from '../app/shared/layout';
+import { bubbleMetrics } from '../app/shared/bubbleLayout';
 
 describe('人物屏幕锚点独立于窗口外框', () => {
   for (const area of [
@@ -8,36 +9,38 @@ describe('人物屏幕锚点独立于窗口外框', () => {
     { x: 1920, y: 0, width: 1024, height: 728 },
   ]) {
     it(`屏幕 ${area.x},${area.y} 四角开关面板、气泡均不改变人物位置`, () => {
-      for (const x of [area.x, area.x + area.width])
-        for (const y of [area.y, area.y + area.height]) {
-          const base = desktopLayout({ x, y }, 1, { panel: null, bubble: null }, area);
-          for (const request of [
-            { panel: null, bubble: { width: 88, height: 62 }, controls: true },
-            {
-              panel: { width: 316, height: 520 },
-              bubble: { width: 296, height: 184 },
-              controls: true,
-            },
-            { panel: { width: 316, height: 520 }, bubble: null },
-            { panel: null, bubble: { width: 180, height: 90 } },
-            { panel: { width: 420, height: 340 }, bubble: { width: 320, height: 220 } },
-            { panel: null, bubble: null },
-          ]) {
-            const next = desktopLayout(base.anchor, 1, request, area);
-            expect(next.anchor).toEqual(base.anchor);
-            expect(next.bounds.x + next.layout.body.x).toBe(base.bounds.x + base.layout.body.x);
-            expect(next.bounds.y + next.layout.body.y).toBe(base.bounds.y + base.layout.body.y);
-            expect(next.bounds.x).toBeGreaterThanOrEqual(area.x);
-            expect(next.bounds.y).toBeGreaterThanOrEqual(area.y);
-            expect(next.bounds.x + next.bounds.width).toBeLessThanOrEqual(area.x + area.width);
-            expect(next.bounds.y + next.bounds.height).toBeLessThanOrEqual(area.y + area.height);
+      for (const scale of [0.25, 0.55, 1, 1.5])
+        for (const x of [area.x, area.x + area.width])
+          for (const y of [area.y, area.y + area.height]) {
+            const base = desktopLayout({ x, y }, scale, { panel: null, bubble: null }, area);
+            const metrics = bubbleMetrics(scale);
+            for (const request of [
+              { panel: null, bubble: metrics.min, controls: true },
+              {
+                panel: { width: 316, height: 520 },
+                bubble: metrics.max,
+                controls: true,
+              },
+              { panel: { width: 316, height: 520 }, bubble: null },
+              { panel: null, bubble: { width: 180, height: 90 } },
+              { panel: { width: 420, height: 340 }, bubble: { width: 320, height: 220 } },
+              { panel: null, bubble: null },
+            ]) {
+              const next = desktopLayout(base.anchor, scale, request, area);
+              expect(next.anchor).toEqual(base.anchor);
+              expect(next.bounds.x + next.layout.body.x).toBe(base.bounds.x + base.layout.body.x);
+              expect(next.bounds.y + next.layout.body.y).toBe(base.bounds.y + base.layout.body.y);
+              expect(next.bounds.x).toBeGreaterThanOrEqual(area.x);
+              expect(next.bounds.y).toBeGreaterThanOrEqual(area.y);
+              expect(next.bounds.x + next.bounds.width).toBeLessThanOrEqual(area.x + area.width);
+              expect(next.bounds.y + next.bounds.height).toBeLessThanOrEqual(area.y + area.height);
+            }
           }
-        }
     });
   }
   it('人物底边贴合任务栏，操作栏与面板展开不会向上推人物', () => {
     const area = { x: 0, y: 0, width: 1920, height: 1040 };
-    for (const scale of [0.55, 1, 1.35]) {
+    for (const scale of [0.25, 0.55, 1, 1.5]) {
       const base = desktopLayout(
         { x: 960, y: 1400 },
         scale,
@@ -71,9 +74,28 @@ describe('人物屏幕锚点独立于窗口外框', () => {
     );
     const cloud = next.layout.bubble!,
       body = next.layout.body;
-    expect(next.bounds.x + cloud.x).toBeCloseTo(Math.round(960 - 208 * 0.42 - 88 * 0.78 - 18), 0);
-    expect(cloud.y - body.y).toBe(-4);
+    expect(next.bounds.x + cloud.x).toBeCloseTo(
+      Math.round(960 - 208 * 0.42 - 88 * 0.78 - 18 / 0.55),
+      0,
+    );
+    expect(cloud.y - body.y).toBe(Math.round(20 + 38 / 0.55 - 62));
     expect(next.anchor).toEqual({ x: 960, y: 624 });
+  });
+  it('小人物没有 320 像素的透明占位，快捷面板按真实尺寸布局', () => {
+    const area = { x: 0, y: 0, width: 1920, height: 1040 };
+    const base = desktopLayout({ x: 80, y: 1040 }, 0.25, { panel: null, bubble: null }, area);
+    expect(base.layout.body.width).toBe(136);
+    const next = desktopLayout(
+      base.anchor,
+      0.25,
+      { panel: { width: 240, height: 42 }, bubble: { width: 40, height: 28 } },
+      area,
+    );
+    expect(next.layout.panel!.width).toBe(240);
+    expect(next.layout.panel!.height).toBe(42);
+    expect(next.layout.bubble!.width).toBe(40);
+    expect(next.layout.bubble!.height).toBe(28);
+    expect(next.anchor).toEqual(base.anchor);
   });
   it('拖动按位移连续缩放，限制大小且保持锚点', () => {
     const area = { x: 0, y: 0, width: 1920, height: 1040 };
@@ -83,9 +105,9 @@ describe('人物屏幕锚点独立于窗口外框', () => {
     expect(small).toBeLessThan(1);
     expect(large).toBeGreaterThan(1);
     expect(small % 0.25).not.toBe(0);
-    expect(dragScale(1, -1000, -1000)).toBe(1.35);
-    expect(dragScale(1, 1000, 1000)).toBe(0.55);
-    for (const value of [small, large, 0.55, 1.35])
+    expect(dragScale(1, -1000, -1000)).toBe(1.5);
+    expect(dragScale(1, 1000, 1000)).toBe(0.25);
+    for (const value of [small, large, 0.25, 1.5])
       expect(desktopLayout(anchor, value, { panel: null, bubble: null }, area).anchor).toEqual(
         anchor,
       );

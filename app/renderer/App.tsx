@@ -1,9 +1,18 @@
-import { useCallback, useEffect, useRef, useState, type CSSProperties } from 'react';
+import {
+  useCallback,
+  useEffect,
+  useLayoutEffect,
+  useRef,
+  useState,
+  type CSSProperties,
+} from 'react';
 import { ACTIONS, DEFAULT_DISABLED_ACTIONS, selectActions } from '../shared/actions';
 import type { AppState, DraftImage } from '../shared/desktop';
 import { usePetAnimation } from './usePetAnimation';
 import { Switch } from './Switch';
 import { useIncomingBubble } from './useIncomingBubble';
+import { useBubbleLayout } from './useBubbleLayout';
+import { BUBBLE_INSETS } from '../shared/bubbleLayout';
 import { useDesktopLayout } from './useDesktopLayout';
 import { dragScale, MIN_SCALE, MAX_SCALE, desktopLayout, PET_TOP } from '../shared/layout';
 
@@ -96,6 +105,7 @@ export function App() {
   const [reducedMotion, setReducedMotion] = useState(false),
     [resizing, setResizing] = useState(false);
   const incoming = useIncomingBubble(state?.messages || [], state?.code || '');
+  const cloud = useBubbleLayout(state?.preferences.scale || 1, incoming.message);
   const { panelRef, bubbleRef, bubbleSize } = useDesktopLayout(
     !!state,
     panel,
@@ -240,6 +250,11 @@ export function App() {
   useEffect(() => {
     if (panel === 'chat' || panel === 'quick') inputRef.current?.focus();
   }, [panel, preview]);
+  useLayoutEffect(() => {
+    if (panel !== 'quick' || !inputRef.current) return;
+    inputRef.current.style.height = '26px';
+    inputRef.current.style.height = Math.min(44, inputRef.current.scrollHeight + 1) + 'px';
+  }, [panel, text]);
   useEffect(() => {
     const key = (event: KeyboardEvent) => {
       if (event.key !== 'Escape') return;
@@ -249,7 +264,10 @@ export function App() {
         setControlsOpen(false);
       }
     };
-    const blur = () => setControlsOpen(false);
+    const blur = () => {
+      setControlsOpen(false);
+      setPanel((current) => (current === 'quick' ? null : current));
+    };
     window.addEventListener('keydown', key);
     window.addEventListener('blur', blur);
     return () => {
@@ -277,6 +295,12 @@ export function App() {
     '--scale': scale,
     '--pet-height': Math.round(208 * scale) + 'px',
     '--max-panel-height': layout.maxPanelHeight + 'px',
+    '--bubble-ratio': cloud.ratio,
+    '--bubble-font': cloud.fontSize + 'px',
+    '--bubble-left': BUBBLE_INSETS.left * 100 + '%',
+    '--bubble-right': BUBBLE_INSETS.right * 100 + '%',
+    '--bubble-top': BUBBLE_INSETS.top * 100 + '%',
+    '--bubble-bottom': BUBBLE_INSETS.bottom * 100 + '%',
   } as CSSProperties;
   const panelStyle = {
     left: layout.panel?.x || 0,
@@ -338,7 +362,7 @@ export function App() {
         <textarea
           ref={inputRef}
           aria-label="消息内容"
-          placeholder="写点什么…"
+          placeholder={compact ? '…' : '写点什么…'}
           rows={1}
           maxLength={4000}
           value={text}
@@ -369,8 +393,18 @@ export function App() {
           disabled={!canSend || busy || (!text.trim() && !draft)}
           onClick={send}
         >
-          <Icon name="send" size={17} />
+          <Icon name="send" size={compact ? 14 : 17} />
         </button>
+        {compact && (
+          <button
+            className="icon-button quick-close"
+            aria-label="关闭弹窗"
+            title="收起 · Esc"
+            onClick={() => setPanel(null)}
+          >
+            <Icon name="close" size={13} />
+          </button>
+        )}
       </div>
       <p
         className={'quick-hint ' + (error ? 'has-error' : '')}
@@ -576,23 +610,19 @@ export function App() {
                   : '聊天窗口'
           }
         >
-          <header>
-            <div>
-              <span className="eyebrow">铃宝 · 陪在这里</span>
-              <h1>
-                {panel === 'menu'
-                  ? '小小控制室'
-                  : panel === 'status'
-                    ? '我的状态'
-                    : panel === 'quick'
-                      ? '快捷回复'
-                      : '和你聊天'}
-              </h1>
-            </div>
-            <button className="icon-button" aria-label="关闭弹窗" onClick={() => setPanel(null)}>
-              <Icon name="close" />
-            </button>
-          </header>
+          {panel !== 'quick' && (
+            <header>
+              <div>
+                <span className="eyebrow">铃宝 · 陪在这里</span>
+                <h1>
+                  {panel === 'menu' ? '小小控制室' : panel === 'status' ? '我的状态' : '和你聊天'}
+                </h1>
+              </div>
+              <button className="icon-button" aria-label="关闭弹窗" onClick={() => setPanel(null)}>
+                <Icon name="close" />
+              </button>
+            </header>
+          )}
           <div className={'panel-body ' + (panel === 'chat' ? 'chat-body' : '')}>
             {panel === 'status' && (
               <>
@@ -844,6 +874,8 @@ export function App() {
         style={{
           left: layout.bubble?.x || 0,
           top: layout.bubble?.y || 0,
+          width: cloud.size.width,
+          height: cloud.size.height,
           visibility:
             layout.bubble &&
             bubbleSize &&
@@ -858,8 +890,14 @@ export function App() {
             <button
               className="bubble-surface"
               aria-label="打开快捷聊天"
-              title="点击快捷回复"
-              onClick={openQuick}
+              title="双击快捷回复"
+              onDoubleClick={openQuick}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter' || e.key === ' ') {
+                  e.preventDefault();
+                  openQuick();
+                }
+              }}
             >
               <span className="bubble-art mirrored" aria-hidden="true">
                 <img src="./ui/speech-bubble.png" alt="" />
@@ -872,23 +910,18 @@ export function App() {
               className="speech-content"
               key={incoming.message.id}
               aria-live="polite"
-              onClick={() => {
-                if (!getSelection()?.toString()) openQuick();
+              onDoubleClick={(e) => {
+                e.preventDefault();
+                getSelection()?.removeAllRanges();
+                openQuick();
               }}
             >
               {incoming.message.kind === 'text' ? (
                 <p className="speech-text">{incoming.message.text}</p>
               ) : (
-                <button
-                  className="image-notice"
-                  aria-label="在聊天窗口查看图片"
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    openChat();
-                  }}
-                >
+                <p className="image-notice" title="双击人物，在完整聊天窗口查看图片">
                   【图片信息】
-                </button>
+                </p>
               )}
             </div>
           </>
@@ -896,8 +929,14 @@ export function App() {
           <button
             className="idle-cloud-button"
             aria-label="打开快捷聊天"
-            title="点击快捷回复 · 双击人物聊天 · 右键人物设置"
-            onClick={openQuick}
+            title="双击快捷回复 · 双击人物聊天 · 右键人物设置"
+            onDoubleClick={openQuick}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter' || e.key === ' ') {
+                e.preventDefault();
+                openQuick();
+              }
+            }}
           >
             <img src="./ui/idle-bubble.png" alt="" />
             <span className="idle-dots" aria-hidden="true">

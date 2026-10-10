@@ -1,5 +1,5 @@
-export const MIN_SCALE = 0.55;
-export const MAX_SCALE = 1.35;
+export const MIN_SCALE = 0.25;
+export const MAX_SCALE = 1.5;
 export const PET_HEIGHT = 208;
 export const PET_TOP = 20;
 export type Rect = { x: number; y: number; width: number; height: number };
@@ -39,7 +39,7 @@ export function desktopLayout(
   request: LayoutRequest,
   area: Rect,
 ) {
-  const bodyWidth = Math.min(area.width - 24, Math.max(320, Math.round(416 * scale + 32)));
+  const bodyWidth = Math.min(area.width - 24, Math.round(416 * scale + 32));
   const petHeight = Math.round(PET_HEIGHT * scale);
   const center = {
     x: Math.round(
@@ -61,8 +61,8 @@ export function desktopLayout(
   });
   let panel: Rect | null = null;
   if (request.panel) {
-    const width = Math.min(440, area.width - 24, Math.max(280, Math.ceil(request.panel.width)));
-    const height = Math.min(maxPanelHeight, Math.max(100, Math.ceil(request.panel.height)));
+    const width = Math.min(440, area.width - 24, Math.max(180, Math.ceil(request.panel.width)));
+    const height = Math.min(maxPanelHeight, Math.max(40, Math.ceil(request.panel.height)));
     const right = body.x + body.width + 12;
     const left = body.x - width - 12;
     panel = fit({
@@ -81,13 +81,19 @@ export function desktopLayout(
     r.y + r.height <= area.y + area.height;
   let bubble: Rect | null = null;
   if (request.bubble) {
-    const width = Math.min(340, area.width - 24, Math.max(60, Math.ceil(request.bubble.width)));
-    const height = Math.min(260, area.height - 24, Math.max(40, Math.ceil(request.bubble.height)));
-    // 按参照图向左 18、向下 60 DIP，尾巴靠近脑袋左上侧的留白。
-    // 这里允许云朵进入人物画布左上角的透明区，不能以整个窗口作为障碍。
+    const width = Math.min(440, area.width - 24, Math.max(24, Math.ceil(request.bubble.width)));
+    const height = Math.min(260, area.height - 24, Math.max(20, Math.ceil(request.bubble.height)));
+    // 55% 为气泡参考尺寸，尾巴与脑袋的偏移一起缩放。
+    // 云朵可以进入画布左上透明区，不反过来推动人物锚点。
+    const ratio = scale / 0.55;
     const headX = center.x - petHeight * 0.42;
     const candidates = [
-      { x: headX - width * 0.78 - 18, y: body.y - height + 58, width, height },
+      {
+        x: headX - width * 0.78 - 18 * ratio,
+        y: body.y + PET_TOP + 38 * ratio - height,
+        width,
+        height,
+      },
       { x: body.x - width - 12, y: body.y, width, height },
       { x: body.x + body.width + 12, y: body.y, width, height },
       { x: center.x - width / 2, y: body.y + body.height + 8, width, height },
@@ -110,6 +116,8 @@ export function desktopLayout(
       { x: center.x - width / 2, y: center.y + 8, width, height },
       { x: center.x - width / 2, y: body.y - height - 8, width, height },
       { x: center.x - width / 2, y: above, width, height },
+      { x: body.x + body.width - width, y: above, width, height },
+      { x: body.x, y: above, width, height },
       { x: body.x + body.width + 12, y: center.y - height, width, height },
       { x: body.x - width - 12, y: center.y - height, width, height },
     ];
