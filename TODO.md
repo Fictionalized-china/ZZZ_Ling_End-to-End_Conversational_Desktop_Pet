@@ -72,7 +72,7 @@
 - [x] 30 项单元测试、本地与云端真实协议、Electron UI 与实际应用退出回归
 - [x] 更新 Cloudflare Worker，免费方案不新增服务，直连复测通过
 - [x] 打包 1.0.1，实际 ASAR 四项复测，根目录 exe 版本与哈希核对
-- [ ] 上传 GitHub 后重新拉取静态校验 exe、README、动画与气泡素材
+- [x] 上传 GitHub 后重新拉取静态校验 exe、README、动画与气泡素材
 
 ## 下一批
 
