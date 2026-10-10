@@ -24,7 +24,7 @@
 
 ## P3 验证与交付
 
-- [x] TypeScript、30 项单元测试、真实本地 Worker 集成测试
+- [x] TypeScript、36 项单元测试、真实本地 Worker 集成测试
 - [x] 桌面窗口、preload、IPC、首屏图片加载检查
 - [x] 生成 portable exe 并在当前 Win10 主机启动成功
 - [x] npm audit 为 0 项漏洞，生产构建不包含视觉预览夹具
@@ -73,6 +73,17 @@
 - [x] 更新 Cloudflare Worker，免费方案不新增服务，直连复测通过
 - [x] 打包 1.0.1，实际 ASAR 四项复测，根目录 exe 版本与哈希核对
 - [x] 上传 GitHub 后重新拉取静态校验 exe、README、动画与气泡素材
+
+## 1.0.2 连接恢复与窗口修复
+
+- [x] 复现 net::ERR_CONNECTION_CLOSED，有限重试与系统代理／直连恢复，保持证书校验
+- [x] 创建配对按同一凭证幂等，响应丢失后重试不产生多个配对码
+- [x] 移除底部固定预留，让人物贴住任务栏，操作栏靠底时放到上方
+- [x] 大小气泡按参照左下移动，缩放圆点避开气泡遮挡
+- [x] 复现并修复窗口销毁后 IPC 导致 Object has been destroyed
+- [x] 36 项单元测试、真实 Electron 任务栏与连续缩放回归
+- [x] 1.0.2 实际发布包复测、Cloudflare 更新与云端连接恢复验证
+- [ ] 根目录 EXE、README 与 GitHub 同步，重新拉取核对
 
 ## 下一批
 
