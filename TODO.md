@@ -83,7 +83,7 @@
 - [x] 复现并修复窗口销毁后 IPC 导致 Object has been destroyed
 - [x] 36 项单元测试、真实 Electron 任务栏与连续缩放回归
 - [x] 1.0.2 实际发布包复测、Cloudflare 更新与云端连接恢复验证
-- [ ] 根目录 EXE、README 与 GitHub 同步，重新拉取核对
+- [x] 根目录 EXE、README 与 GitHub 同步，重新拉取核对
 
 ## 下一批
 
