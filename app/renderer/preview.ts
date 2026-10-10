@@ -1,6 +1,8 @@
 // 仅开发服务器 ?preview=1 使用的视觉检查夹具，不进入生产界面。
 import type { AppState, DesktopApi } from '../shared/desktop';
 import { animationPreferences } from '../shared/actions';
+import { clampScale, desktopLayout } from '../shared/layout';
+let anchor = { x: Math.round(innerWidth / 2), y: Math.round(innerHeight * 0.65) };
 const state: AppState = {
   preferences: {
     ...animationPreferences(),
@@ -49,7 +51,29 @@ const api: DesktopApi = {
   sendText: unavailable,
   sendImage: unavailable,
   moveBy: () => {},
-  setExpanded: () => {},
+  setLayout: (request) => {
+    const next = desktopLayout(anchor, state.preferences.scale, request, {
+      x: 0,
+      y: 0,
+      width: innerWidth,
+      height: innerHeight,
+    });
+    const offsetX = next.bounds.x,
+      offsetY = next.bounds.y;
+    for (const rect of [next.layout.body, next.layout.panel, next.layout.bubble]) {
+      if (rect) {
+        rect.x += offsetX;
+        rect.y += offsetY;
+      }
+    }
+    state.layout = next.layout;
+    anchor = next.anchor;
+    emit();
+  },
+  setScale: (scale) => {
+    state.preferences.scale = clampScale(scale);
+    emit();
+  },
   setInteractive: () => {},
   copyCode: async () => {},
   quit: () => {},

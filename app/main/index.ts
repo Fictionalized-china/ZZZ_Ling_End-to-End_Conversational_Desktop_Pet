@@ -13,6 +13,14 @@ import path from 'node:path';
 import { Relay, normalizeRelay } from './relay';
 import { ACTIONS, animationPreferences } from '../shared/actions';
 import { MAX_IMAGE, MAX_DIMENSION, pngSize } from '../shared/protocol';
+import {
+  clampScale,
+  desktopLayout,
+  scaleAtAnchor,
+  MIN_SCALE,
+  MAX_SCALE,
+  type LayoutRequest,
+} from '../shared/layout';
 import type { AppState, DraftImage, Preferences } from '../shared/desktop';
 declare const __RELAY_URL__: string;
 
@@ -24,9 +32,9 @@ if (!app.requestSingleInstanceLock()) {
 }
 let win: BrowserWindow | undefined,
   relay: Relay,
-  expanded = false,
-  quitting = false,
-  petCenter = 220;
+  quitting = false;
+let anchor = { x: 220, y: 260 };
+let layoutRequest: LayoutRequest = { panel: null, bubble: null };
 let saveTimer: NodeJS.Timeout | undefined;
 const defaults: Preferences = {
   ...animationPreferences(),
@@ -66,21 +74,15 @@ function scheduleSave() {
 }
 function applyLayout() {
   if (!win) return;
-  const old = win.getBounds(),
-    scale = state.preferences.scale,
-    petWidth = Math.round(416 * scale + 24),
-    baseWidth = Math.max(360, petWidth);
-  const width = expanded ? baseWidth + 344 : baseWidth,
-    height = expanded ? Math.max(560, Math.round(208 * scale + 350)) : Math.round(208 * scale + 90);
-  const area = screen.getDisplayMatching(old).workArea;
-  const anchorX = old.x + petCenter;
-  state.dock = expanded && anchorX + width - baseWidth / 2 > area.x + area.width ? 'left' : 'right';
-  const actualWidth = Math.min(width, area.width);
-  const center = state.dock === 'left' && expanded ? actualWidth - baseWidth / 2 : baseWidth / 2;
-  const x = Math.max(area.x, Math.min(area.x + area.width - width, Math.round(anchorX - center)));
-  const y = Math.max(area.y, Math.min(area.y + area.height - height, old.y + old.height - height));
-  win.setBounds({ x, y, width: actualWidth, height: Math.min(height, area.height) });
-  petCenter = center;
+  const area = screen.getDisplayNearestPoint(anchor).workArea;
+  const next = desktopLayout(anchor, state.preferences.scale, layoutRequest, area);
+  anchor = next.anchor;
+  state.preferences.anchorX = anchor.x;
+  state.preferences.anchorY = anchor.y;
+  state.layout = next.layout;
+  const old = win.getBounds();
+  if (Object.entries(next.bounds).some(([key, value]) => old[key as keyof typeof old] !== value))
+    win.setBounds(next.bounds);
   broadcast();
 }
 function toDraft(image: Electron.NativeImage): DraftImage {
@@ -155,8 +157,13 @@ function registerIpc() {
     if (!patch || typeof patch !== 'object') throw new Error('设置无效');
     const next = { ...state.preferences };
     if ('scale' in patch) {
-      if (![0.75, 1, 1.25, 1.5].includes(patch.scale)) throw new Error('尺寸无效');
-      next.scale = patch.scale;
+      if (!Number.isFinite(patch.scale) || patch.scale < MIN_SCALE || patch.scale > MAX_SCALE)
+        throw new Error('尺寸无效');
+      next.scale = scaleAtAnchor(
+        patch.scale,
+        anchor,
+        screen.getDisplayNearestPoint(anchor).workArea,
+      );
     }
     if ('disabledActions' in patch) {
       if (
@@ -182,8 +189,8 @@ function registerIpc() {
       next.autoStart = patch.autoStart;
     }
     state.preferences = next;
-    win?.setAlwaysOnTop(next.alwaysOnTop, 'floating');
-    applyLayout();
+    if ('alwaysOnTop' in patch) win?.setAlwaysOnTop(next.alwaysOnTop, 'floating');
+    if ('scale' in patch) applyLayout();
     await save();
     broadcast();
   });
@@ -196,24 +203,38 @@ function registerIpc() {
       Math.abs(dy) > 2000
     )
       return;
-    const bounds = win!.getBounds(),
-      area = screen.getDisplayMatching(bounds).workArea;
-    const x = Math.round(
-        Math.max(area.x, Math.min(area.x + area.width - bounds.width, bounds.x + dx)),
-      ),
-      y = Math.round(
-        Math.max(area.y, Math.min(area.y + area.height - bounds.height, bounds.y + dy)),
-      );
-    win!.setPosition(x, y);
-    state.preferences.x = x;
-    state.preferences.y = y;
+    anchor = { x: Math.round(anchor.x + dx), y: Math.round(anchor.y + dy) };
+    applyLayout();
     scheduleSave();
   });
-  ipcMain.on('pet:expanded', (event, value) => {
-    if (event.sender === win?.webContents && typeof value === 'boolean' && value !== expanded) {
-      expanded = value;
-      applyLayout();
-    }
+  ipcMain.on('pet:layout', (event, value) => {
+    if (event.sender !== win?.webContents || !value || typeof value !== 'object') return;
+    const valid = (size: unknown) =>
+      size === null ||
+      (typeof size === 'object' &&
+        size !== null &&
+        Number.isFinite((size as any).width) &&
+        Number.isFinite((size as any).height) &&
+        (size as any).width > 0 &&
+        (size as any).width <= 600 &&
+        (size as any).height > 0 &&
+        (size as any).height <= 600);
+    if (!valid(value.panel) || !valid(value.bubble)) return;
+    if (JSON.stringify(value) === JSON.stringify(layoutRequest)) return;
+    layoutRequest = { panel: value.panel, bubble: value.bubble };
+    applyLayout();
+  });
+  ipcMain.on('pet:scale', (event, value) => {
+    if (event.sender !== win?.webContents || !Number.isFinite(value)) return;
+    const scale = scaleAtAnchor(
+      clampScale(value),
+      anchor,
+      screen.getDisplayNearestPoint(anchor).workArea,
+    );
+    if (scale === state.preferences.scale) return;
+    state.preferences.scale = scale;
+    applyLayout();
+    scheduleSave();
   });
   ipcMain.on('pet:interactive', (event, value) => {
     if (event.sender === win?.webContents && typeof value === 'boolean')
@@ -232,25 +253,38 @@ app.whenReady().then(async () => {
     state.preferences = {
       ...defaults,
       ...animationPreferences(saved),
-      scale: [0.75, 1, 1.25, 1.5].includes(saved.scale) ? saved.scale : 1,
+      scale: Number.isFinite(saved.scale) ? clampScale(saved.scale) : 1,
       alwaysOnTop: saved.alwaysOnTop !== false,
       autoStart: saved.autoStart === true,
       relayUrl: saved.relayUrl ? normalizeRelay(saved.relayUrl) : __RELAY_URL__,
       x: Number.isFinite(saved.x) ? saved.x : undefined,
       y: Number.isFinite(saved.y) ? saved.y : undefined,
+      anchorX: Number.isFinite(saved.anchorX) ? saved.anchorX : undefined,
+      anchorY: Number.isFinite(saved.anchorY) ? saved.anchorY : undefined,
     };
   } catch {}
   await save().catch(() => {});
   if (process.env.DAFEYU_RELAY_URL && !app.isPackaged)
     state.preferences.relayUrl = normalizeRelay(process.env.DAFEYU_RELAY_URL);
   const area = screen.getPrimaryDisplay().workArea;
-  const x = state.preferences.x ?? area.x + area.width - 480,
-    y = state.preferences.y ?? area.y + area.height - 320;
+  anchor = {
+    x:
+      state.preferences.anchorX ??
+      (state.preferences.x !== undefined
+        ? state.preferences.x + Math.max(360, 416 * state.preferences.scale + 24) / 2
+        : area.x + area.width - 250),
+    y:
+      state.preferences.anchorY ??
+      (state.preferences.y !== undefined
+        ? state.preferences.y + 208 * state.preferences.scale + 30
+        : area.y + area.height - 150),
+  };
+  anchor = { x: Math.round(anchor.x), y: Math.round(anchor.y) };
   win = new BrowserWindow({
     width: 440,
     height: 300,
-    x,
-    y,
+    x: Math.round(anchor.x - 220),
+    y: Math.round(anchor.y - 250),
     frame: false,
     transparent: true,
     resizable: false,
@@ -284,6 +318,8 @@ app.whenReady().then(async () => {
   win.webContents.once('did-finish-load', broadcast);
   powerMonitor.on('suspend', () => relay.reconnect());
   powerMonitor.on('resume', () => relay.reconnect());
+  screen.on('display-metrics-changed', () => applyLayout());
+  screen.on('display-removed', () => applyLayout());
 });
 app.on('second-instance', () => {
   win?.show();

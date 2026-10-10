@@ -1,4 +1,5 @@
 import type { Choice, Presence } from './protocol';
+import type { DesktopLayout, LayoutRequest } from './layout';
 export interface Preferences {
   disabledActions: string[];
   animationDefaultsVersion: number;
@@ -8,6 +9,8 @@ export interface Preferences {
   relayUrl: string;
   x?: number;
   y?: number;
+  anchorX?: number;
+  anchorY?: number;
 }
 export interface ChatMessage {
   id: string;
@@ -15,6 +18,8 @@ export interface ChatMessage {
   kind: 'text' | 'image';
   text?: string;
   image?: string;
+  width?: number;
+  height?: number;
   time: number;
   delivery: 'sending' | 'delivered' | 'failed';
 }
@@ -30,6 +35,7 @@ export interface AppState {
   messages: ChatMessage[];
   notice: string;
   dock: 'left' | 'right';
+  layout?: DesktopLayout;
 }
 export interface DraftImage {
   dataUrl: string;
@@ -50,7 +56,8 @@ export interface DesktopApi {
   sendText(text: string): Promise<void>;
   sendImage(dataUrl: string): Promise<void>;
   moveBy(dx: number, dy: number): void;
-  setExpanded(expanded: boolean): void;
+  setLayout(request: LayoutRequest): void;
+  setScale(scale: number): void;
   setInteractive(interactive: boolean): void;
   copyCode(): Promise<void>;
   quit(): void;

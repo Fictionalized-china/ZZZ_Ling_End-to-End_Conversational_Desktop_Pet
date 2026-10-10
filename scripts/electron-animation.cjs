@@ -42,9 +42,9 @@ app.on('browser-window-created', (_event, win) => {
         observer.observe(canvas, {attributes:true, attributeFilter:['data-frame']});
         const start = canvas.dataset.startedAt;
         await wait(300);
-        [...document.querySelectorAll('.toolbar button')].find(b=>b.textContent.includes('菜单')).click();
+        [...document.querySelectorAll('.toolbar button')].find(b=>b.textContent.includes('状态')).click();
         await wait(350);
-        const menuChecks = [...document.querySelectorAll('.action-row input')].map(i=>i.checked);
+        const menuChecks = [...document.querySelectorAll('.action-row [role="switch"]')].map(i=>i.getAttribute('aria-checked')==='true');
         document.querySelector('[aria-label="关闭弹窗"]').click();
         await wait(350); await window.pet.setStatus('busy');
         await wait(350); await window.pet.setStatus('online');
@@ -92,7 +92,7 @@ app.on('browser-window-created', (_event, win) => {
       assert.equal(result.initial.preferences.animationDefaultsVersion, 1);
       assert.equal(result.initial.preferences.scale, 1.25);
       assert.equal(result.initial.preferences.alwaysOnTop, false);
-      assert.deepEqual(result.continuous.menuChecks, [false, true, true, true, true, true]);
+      assert.deepEqual(result.continuous.menuChecks, [true, false, false, false, false, false]);
       assert.equal(result.continuous.start, result.continuous.end, 'Panels/status reset the clock');
       assert.ok(result.continuous.samples.every((s) => s.startedAt === result.continuous.start));
       const frames = result.continuous.samples.map((s) => s.frame);

@@ -1,17 +1,14 @@
-import {
-  useCallback,
-  useEffect,
-  useRef,
-  useState,
-  type CSSProperties,
-  type PointerEvent,
-} from 'react';
+import { useCallback, useEffect, useRef, useState, type CSSProperties } from 'react';
 import { ACTIONS, DEFAULT_DISABLED_ACTIONS, selectActions } from '../shared/actions';
 import type { AppState, DraftImage } from '../shared/desktop';
 import { usePetAnimation } from './usePetAnimation';
+import { Switch } from './Switch';
+import { useIncomingBubble } from './useIncomingBubble';
+import { useDesktopLayout } from './useDesktopLayout';
+import { dragScale, MIN_SCALE, MAX_SCALE, desktopLayout } from '../shared/layout';
 
 const labels = { online: '在线', offline: '不在线', busy: '忙碌' };
-type Panel = 'menu' | 'composer' | 'status' | 'size' | null;
+type Panel = 'menu' | 'status' | 'history' | null;
 function Icon({ name, size = 18 }: { name: string; size?: number }) {
   const paths: Record<string, React.ReactNode> = {
     status: (
@@ -28,6 +25,11 @@ function Icon({ name, size = 18 }: { name: string; size?: number }) {
     size: (
       <>
         <path d="M8 3H3v5m13-5h5v5M3 16v5h5m13-5v5h-5M8 8h8v8H8z" />
+      </>
+    ),
+    history: (
+      <>
+        <path d="M3 11a9 9 0 1 1 3 8M3 4v7h7M12 7v5l3 2" />
       </>
     ),
     pin: (
@@ -89,9 +91,16 @@ export function App() {
     [error, setError] = useState(''),
     [busy, setBusy] = useState(false);
   const [preview, setPreview] = useState<string | null>(null),
-    [bubble, setBubble] = useState(false),
     [connectionSettings, setConnectionSettings] = useState(false);
-  const [reducedMotion, setReducedMotion] = useState(false);
+  const [reducedMotion, setReducedMotion] = useState(false),
+    [resizing, setResizing] = useState(false);
+  const incoming = useIncomingBubble(state?.messages || [], state?.code || '');
+  const { panelRef, bubbleRef, bubbleSize } = useDesktopLayout(
+    !!state,
+    panel,
+    incoming.message?.id,
+    preview,
+  );
   const { canvasRef, alphaRef } = usePetAnimation(
     selectActions(
       state?.effective || 'offline',
@@ -101,10 +110,22 @@ export function App() {
     reducedMotion,
     setError,
   );
-  const drag = useRef<{ x: number; y: number; moved: boolean } | null>(null);
-  const interactive = useRef(false),
-    lastMessage = useRef(''),
+  const drag = useRef<{ x: number; y: number } | null>(null),
+    interactive = useRef(false),
     oldCode = useRef('');
+  const inputRef = useRef<HTMLTextAreaElement>(null),
+    historyRef = useRef<HTMLDivElement>(null);
+  const resizeDrag = useRef<{
+    x: number;
+    y: number;
+    scale: number;
+    held: boolean;
+    lastX: number;
+    lastY: number;
+  } | null>(null);
+  const holdTimer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined),
+    resizeFrame = useRef(0),
+    requestedScale = useRef(1);
   const run = useCallback(async (action: () => Promise<unknown>) => {
     setError('');
     setBusy(true);
@@ -122,21 +143,15 @@ export function App() {
       return;
     }
     const update = (next: AppState) => {
-      setState(next);
       if (oldCode.current && next.code !== oldCode.current) {
         setText('');
         setDraft(null);
         setPreview(null);
-        setBubble(false);
       }
       oldCode.current = next.code;
-      const latest = next.messages.at(-1);
-      if (latest && latest.id !== lastMessage.current) {
-        lastMessage.current = latest.id;
-        if (latest.direction === 'in') setBubble(true);
-      }
+      setState(next);
     };
-    window.pet.getState().then((next) => {
+    void window.pet.getState().then((next) => {
       update(next);
       setRelayUrl(next.preferences.relayUrl);
     });
@@ -149,19 +164,27 @@ export function App() {
     media.addEventListener('change', changed);
     return () => media.removeEventListener('change', changed);
   }, []);
+  useEffect(
+    () => () => {
+      clearTimeout(holdTimer.current);
+      cancelAnimationFrame(resizeFrame.current);
+    },
+    [],
+  );
   useEffect(() => {
-    window.pet?.setExpanded(!!panel || !!preview || bubble);
-  }, [panel, preview, bubble]);
+    if (panel === 'history' && historyRef.current)
+      historyRef.current.scrollTop = historyRef.current.scrollHeight;
+  }, [panel, state?.messages.length]);
   useEffect(() => {
     const move = (event: MouseEvent) => {
       const target = event.target as HTMLElement;
-      let active = !!target.closest('[data-interactive]') || !!drag.current;
-      const img = canvasRef.current,
+      let active = !!target.closest('[data-interactive]') || !!drag.current || !!resizeDrag.current;
+      const canvas = canvasRef.current,
         alpha = alphaRef.current;
-      if (!active && img && alpha) {
-        const rect = img.getBoundingClientRect(),
-          x = alpha.x + Math.floor(((event.clientX - rect.left) * img.width) / rect.width),
-          y = alpha.y + Math.floor(((event.clientY - rect.top) * img.height) / rect.height);
+      if (!active && canvas && alpha) {
+        const r = canvas.getBoundingClientRect();
+        const x = alpha.x + Math.floor(((event.clientX - r.left) * canvas.width) / r.width),
+          y = alpha.y + Math.floor(((event.clientY - r.top) * canvas.height) / r.height);
         if (x >= 0 && y >= 0 && x < alpha.width && y < alpha.height)
           active = alpha.data[y * alpha.width + x] > 25;
       }
@@ -173,21 +196,24 @@ export function App() {
     document.addEventListener('mousemove', move);
     return () => document.removeEventListener('mousemove', move);
   }, []);
-  function onDrag(event: PointerEvent<HTMLCanvasElement>) {
-    if (!drag.current) return;
-    const dx = event.screenX - drag.current.x,
-      dy = event.screenY - drag.current.y;
-    if (Math.abs(dx) + Math.abs(dy) > 2) drag.current.moved = true;
-    window.pet.moveBy(dx, dy);
-    drag.current.x = event.screenX;
-    drag.current.y = event.screenY;
-  }
   const toggle = (target: Panel) => {
     setError('');
-    setPanel((previous) => (previous === target ? null : target));
+    setPanel((current) => (current === target ? null : target));
   };
-  const latest = state?.messages.filter((message) => message.direction === 'in').at(-1);
-  const canSend = state?.effective === 'online' && state.own === 'online';
+  const queueScale = (value: number) => {
+    requestedScale.current = value;
+    if (!resizeFrame.current)
+      resizeFrame.current = requestAnimationFrame(() => {
+        resizeFrame.current = 0;
+        window.pet.setScale(requestedScale.current);
+      });
+  };
+  const finishResize = () => {
+    clearTimeout(holdTimer.current);
+    if (resizeDrag.current?.held) window.pet.setScale(requestedScale.current);
+    resizeDrag.current = null;
+    setResizing(false);
+  };
   const send = () =>
     run(async () => {
       if (draft) {
@@ -205,96 +231,280 @@ export function App() {
         {error || '铃宝正在醒来…'}
       </div>
     );
-  const scale = state.preferences.scale;
+  const scale = state.preferences.scale,
+    canSend = state.effective === 'online' && state.own === 'online';
+  const layout =
+    state.layout ||
+    desktopLayout(
+      { x: 300, y: 320 },
+      scale,
+      { panel: null, bubble: null },
+      { x: 0, y: 0, width: innerWidth, height: innerHeight },
+    ).layout;
   const style = {
     '--scale': scale,
-    '--pet-width': `${Math.max(360, 416 * scale + 24)}px`,
+    '--pet-height': Math.round(208 * scale) + 'px',
+    '--max-panel-height': layout.maxPanelHeight + 'px',
   } as CSSProperties;
+  const panelStyle = {
+    left: layout.panel?.x || 0,
+    top: layout.panel?.y || 0,
+    visibility: layout.panel ? 'visible' : 'hidden',
+  } as CSSProperties;
+  const chatHint = canSend
+    ? 'Enter 发送 · Shift+Enter 换行'
+    : state.own === 'busy'
+      ? '自己忙碌中，草稿会保留'
+      : state.effective === 'busy'
+        ? '对方忙碌中，暂停收发'
+        : state.paired
+          ? '等待对方在线后发送'
+          : '先在菜单中与对方配对';
+  const bubbleImageSize =
+    incoming.message?.width && incoming.message.height
+      ? (() => {
+          const ratio = Math.min(200 / incoming.message.width!, 140 / incoming.message.height!, 1);
+          return {
+            width: incoming.message.width! * ratio,
+            height: incoming.message.height! * ratio,
+          };
+        })()
+      : undefined;
   return (
-    <main className={`stage dock-${state.dock}`} style={style}>
-      <div className="pet-zone">
-        <div
-          className={`presence ${state.effective}`}
+    <main className="stage" style={style}>
+      <div
+        className="pet-zone"
+        style={{
+          left: layout.body.x,
+          top: layout.body.y,
+          width: layout.body.width,
+          height: layout.body.height,
+        }}
+      >
+        <button
+          className={'presence ' + state.own}
           data-interactive
-          title={`自己：${labels[state.own]} · 对方：${labels[state.peer]}`}
+          onClick={() => toggle('status')}
+          title={'自己：' + labels[state.own] + ' · 对方：' + labels[state.peer] + ' · ' + chatHint}
+          aria-label={'自己的状态：' + labels[state.own]}
         >
           <span className="status-dot" />
-          {labels[state.effective]}
+          {labels[state.own]}
           <span className="presence-detail">{state.paired ? '已配对' : '等待配对'}</span>
-        </div>
-        <canvas
-          ref={canvasRef}
-          className="pet"
-          role="img"
-          aria-label="铃宝：趴姿晃头摆腿"
-          draggable={false}
-          onPointerDown={(e) => {
-            if (e.button !== 0) return;
-            drag.current = { x: e.screenX, y: e.screenY, moved: false };
-            e.currentTarget.setPointerCapture(e.pointerId);
-          }}
-          onPointerMove={onDrag}
-          onPointerUp={() => {
-            drag.current = null;
-          }}
-          onLostPointerCapture={() => {
-            drag.current = null;
-          }}
-          onDoubleClick={() => {
-            setBubble(false);
-            toggle('composer');
-          }}
-        />
-        <nav className="toolbar" aria-label="桌宠操作" data-interactive>
-          <button className={panel === 'status' ? 'selected' : ''} onClick={() => toggle('status')}>
-            <Icon name="status" />
-            <span>状态</span>
-          </button>
-          <button className={panel === 'menu' ? 'selected' : ''} onClick={() => toggle('menu')}>
-            <Icon name="menu" />
-            <span>菜单</span>
-          </button>
-          <button className={panel === 'size' ? 'selected' : ''} onClick={() => toggle('size')}>
-            <Icon name="size" />
-            <span>调整大小</span>
-          </button>
+        </button>
+        <div className="pet-figure">
+          <canvas
+            ref={canvasRef}
+            className="pet"
+            role="img"
+            aria-label="铃宝：趴姿晃头摆腿"
+            draggable={false}
+            onPointerDown={(e) => {
+              if (e.button !== 0) return;
+              drag.current = { x: e.screenX, y: e.screenY };
+              e.currentTarget.setPointerCapture(e.pointerId);
+            }}
+            onPointerMove={(e) => {
+              if (!drag.current) return;
+              window.pet.moveBy(e.screenX - drag.current.x, e.screenY - drag.current.y);
+              drag.current = { x: e.screenX, y: e.screenY };
+            }}
+            onPointerUp={() => {
+              drag.current = null;
+            }}
+            onLostPointerCapture={() => {
+              drag.current = null;
+            }}
+            onDoubleClick={() => {
+              incoming.dismiss();
+              toggle('history');
+            }}
+          />
           <button
-            className={state.preferences.alwaysOnTop ? 'selected' : ''}
-            aria-pressed={state.preferences.alwaysOnTop}
-            onClick={() =>
-              run(() => window.pet.setPreferences({ alwaysOnTop: !state.preferences.alwaysOnTop }))
-            }
+            className={'resize-handle ' + (resizing ? 'resizing' : '')}
+            data-interactive
+            role="slider"
+            aria-label="按住拖动调整大小"
+            aria-valuemin={MIN_SCALE * 100}
+            aria-valuemax={MAX_SCALE * 100}
+            aria-valuenow={Math.round(scale * 100)}
+            aria-valuetext={Math.round(scale * 100) + '%'}
+            title="长按小圆点拖动缩放；方向键微调，Home 恢复默认"
+            onPointerDown={(e) => {
+              if (e.button !== 0) return;
+              e.preventDefault();
+              e.currentTarget.setPointerCapture(e.pointerId);
+              requestedScale.current = scale;
+              resizeDrag.current = {
+                x: e.screenX,
+                y: e.screenY,
+                lastX: e.screenX,
+                lastY: e.screenY,
+                scale,
+                held: false,
+              };
+              holdTimer.current = setTimeout(() => {
+                const start = resizeDrag.current;
+                if (!start) return;
+                start.held = true;
+                setResizing(true);
+                queueScale(dragScale(start.scale, start.lastX - start.x, start.lastY - start.y));
+              }, 180);
+            }}
+            onPointerMove={(e) => {
+              const start = resizeDrag.current;
+              if (!start) return;
+              start.lastX = e.screenX;
+              start.lastY = e.screenY;
+              if (start.held)
+                queueScale(dragScale(start.scale, e.screenX - start.x, e.screenY - start.y));
+            }}
+            onPointerUp={finishResize}
+            onPointerCancel={finishResize}
+            onLostPointerCapture={finishResize}
+            onKeyDown={(e) => {
+              if (['ArrowUp', 'ArrowRight', 'ArrowDown', 'ArrowLeft', 'Home'].includes(e.key)) {
+                e.preventDefault();
+                window.pet.setScale(
+                  e.key === 'Home'
+                    ? 1
+                    : scale + (e.key === 'ArrowUp' || e.key === 'ArrowRight' ? 0.02 : -0.02),
+                );
+              }
+            }}
           >
-            <Icon name="pin" />
-            <span>{state.preferences.alwaysOnTop ? '已置顶' : '置顶'}</span>
+            <span />
+            {resizing && <output>{Math.round(scale * 100)}%</output>}
           </button>
-        </nav>
+        </div>
+        <div className="pet-footer" data-interactive>
+          <nav className="toolbar" aria-label="桌宠操作">
+            <button
+              className={panel === 'status' ? 'selected' : ''}
+              onClick={() => toggle('status')}
+            >
+              <Icon name="status" />
+              <span>状态</span>
+            </button>
+            <button className={panel === 'menu' ? 'selected' : ''} onClick={() => toggle('menu')}>
+              <Icon name="menu" />
+              <span>菜单</span>
+            </button>
+            <button
+              className={state.preferences.alwaysOnTop ? 'selected' : ''}
+              aria-pressed={state.preferences.alwaysOnTop}
+              onClick={() =>
+                run(() =>
+                  window.pet.setPreferences({ alwaysOnTop: !state.preferences.alwaysOnTop }),
+                )
+              }
+            >
+              <Icon name="pin" />
+              <span>{state.preferences.alwaysOnTop ? '已置顶' : '置顶'}</span>
+            </button>
+          </nav>
+          <div className="quick-composer">
+            <button
+              className="icon-button"
+              aria-label="打开对话记录"
+              title="本次对话记录"
+              onClick={() => {
+                incoming.dismiss();
+                toggle('history');
+              }}
+            >
+              <Icon name="history" size={16} />
+            </button>
+            <button
+              className="icon-button"
+              aria-label="选择图片"
+              title="选择图片，也可以粘贴截图"
+              onClick={() =>
+                run(async () => {
+                  const image = await window.pet.chooseImage();
+                  if (image) setDraft(image);
+                })
+              }
+            >
+              <Icon name="image" size={16} />
+            </button>
+            {draft && (
+              <div
+                className="quick-draft"
+                title={
+                  draft.width +
+                  ' × ' +
+                  draft.height +
+                  ' · ' +
+                  Math.round(draft.bytes / 1024) +
+                  ' KB'
+                }
+              >
+                <img src={draft.dataUrl} alt="待发送图片" />
+                <button aria-label="移除待发送图片" onClick={() => setDraft(null)}>
+                  ×
+                </button>
+              </div>
+            )}
+            <textarea
+              ref={inputRef}
+              aria-label="消息内容"
+              placeholder="写点什么…"
+              rows={1}
+              maxLength={4000}
+              value={text}
+              onChange={(e) => setText(e.target.value)}
+              onPaste={(e) => {
+                if ([...e.clipboardData.items].some((item) => item.type.startsWith('image/'))) {
+                  e.preventDefault();
+                  void run(async () => {
+                    const image = await window.pet.pasteImage();
+                    if (image) setDraft(image);
+                  });
+                }
+              }}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter' && !e.shiftKey && !e.nativeEvent.isComposing) {
+                  e.preventDefault();
+                  if (canSend && !busy && (text.trim() || draft)) void send();
+                }
+              }}
+            />
+            <button
+              className="quick-send"
+              aria-label="发送消息"
+              title="发送"
+              disabled={!canSend || busy || (!text.trim() && !draft)}
+              onClick={send}
+            >
+              <Icon name="send" size={17} />
+            </button>
+          </div>
+          <p
+            className={'quick-hint ' + (error ? 'has-error' : '')}
+            role={error ? 'alert' : undefined}
+            title={error || chatHint}
+          >
+            {error || chatHint}
+          </p>
+        </div>
       </div>
-      {panel && (
+      {panel && !preview && (
         <section
-          className="floating-panel"
+          ref={panelRef}
+          className={'floating-panel ' + (panel === 'history' ? 'history-panel' : '')}
           data-interactive
+          style={panelStyle}
+          role="dialog"
           aria-label={
-            panel === 'menu'
-              ? '桌宠菜单'
-              : panel === 'composer'
-                ? '聊天输入框'
-                : panel === 'status'
-                  ? '选择状态'
-                  : '调整大小'
+            panel === 'menu' ? '桌宠菜单' : panel === 'status' ? '选择状态' : '本次对话记录'
           }
         >
           <header>
             <div>
               <span className="eyebrow">铃宝 · 陪在这里</span>
               <h1>
-                {panel === 'menu'
-                  ? '小小控制室'
-                  : panel === 'composer'
-                    ? '说点什么吧'
-                    : panel === 'status'
-                      ? '现在是什么状态？'
-                      : '刚刚好的大小'}
+                {panel === 'menu' ? '小小控制室' : panel === 'status' ? '我的状态' : '本次对话'}
               </h1>
             </div>
             <button className="icon-button" aria-label="关闭弹窗" onClick={() => setPanel(null)}>
@@ -304,44 +514,56 @@ export function App() {
           <div className="panel-body">
             {panel === 'status' && (
               <>
-                <p className="subtle">双方都在线，才会开启对话。</p>
-                <div className="status-options">
-                  {(['online', 'busy'] as const).map((choice) => (
-                    <button
-                      key={choice}
-                      className={`status-choice ${state.own === choice ? 'active' : ''}`}
-                      aria-pressed={state.own === choice}
-                      onClick={() => run(() => window.pet.setStatus(choice))}
-                    >
-                      <span className={`status-dot ${choice}`} />
-                      <div>
-                        <strong>{labels[choice]}</strong>
-                        <small>
-                          {choice === 'online' ? '可以找我聊天' : '先专注一下，暂停收发'}
-                        </small>
+                <section className="settings-section">
+                  <div className="status-toggle-row">
+                    <div>
+                      <strong>忙碌模式</strong>
+                      <small>
+                        {state.own === 'busy' ? '先专注一下，暂停收发' : '我在线，可以找我聊天'}
+                      </small>
+                    </div>
+                    <span className={'state-label ' + state.own}>{labels[state.own]}</span>
+                    <Switch
+                      checked={state.own === 'busy'}
+                      label="忙碌模式"
+                      onChange={(value) =>
+                        void run(() => window.pet.setStatus(value ? 'busy' : 'online'))
+                      }
+                    />
+                  </div>
+                  <p className="subtle">对方：{labels[state.peer]} · 双方都在线时才能聊天</p>
+                </section>
+                <section className="settings-section">
+                  <div className="section-title">
+                    <h2>动作偏好</h2>
+                    <span>滑块亮起即开启</span>
+                  </div>
+                  <div className="action-list">
+                    {ACTIONS.map((item, index) => (
+                      <div className="action-row" key={item.id}>
+                        <span className="action-number">0{index + 1}</span>
+                        <span>{item.name}</span>
+                        <Switch
+                          checked={!state.preferences.disabledActions.includes(item.id)}
+                          label={'启用' + item.name}
+                          onChange={(enabled) =>
+                            void run(() =>
+                              window.pet.setPreferences({
+                                disabledActions: enabled
+                                  ? state.preferences.disabledActions.filter((id) => id !== item.id)
+                                  : [...state.preferences.disabledActions, item.id],
+                              }),
+                            )
+                          }
+                        />
                       </div>
-                      {state.own === choice && <span className="check">✓</span>}
-                    </button>
-                  ))}
-                </div>
-                <div className="hint">对方目前：{labels[state.peer]}</div>
-              </>
-            )}
-            {panel === 'size' && (
-              <>
-                <p className="subtle">调整桌宠大小，不改变图片比例。</p>
-                <div className="size-options">
-                  {[0.75, 1, 1.25, 1.5].map((value) => (
-                    <button
-                      key={value}
-                      className={scale === value ? 'active' : ''}
-                      aria-pressed={scale === value}
-                      onClick={() => run(() => window.pet.setPreferences({ scale: value }))}
-                    >
-                      {value * 100}%
-                    </button>
-                  ))}
-                </div>
+                    ))}
+                  </div>
+                  {state.preferences.disabledActions.length === 6 && (
+                    <small className="subtle">所有动作已关闭，保留静态陪伴。</small>
+                  )}
+                </section>
+                <p className="subtle">长按人物左上角的小圆点拖动，即可连续缩放。</p>
               </>
             )}
             {panel === 'menu' && (
@@ -414,57 +636,24 @@ export function App() {
                     </button>
                   )}
                   <p className="connection-note" role="status">
-                    <span className={`status-dot ${state.effective}`} />
+                    <span className={'status-dot ' + state.effective} />
                     {state.notice}
                   </p>
                 </section>
                 <section className="settings-section">
-                  <div className="section-title">
-                    <h2>动作偏好</h2>
-                    <span>勾选即停用</span>
-                  </div>
-                  <div className="action-list">
-                    {ACTIONS.map((item, index) => (
-                      <label className="action-row" key={item.id}>
-                        <span className="action-number">0{index + 1}</span>
-                        <span>{item.name}</span>
-                        <input
-                          type="checkbox"
-                          checked={state.preferences.disabledActions.includes(item.id)}
-                          aria-label={`禁用${item.name}`}
-                          onChange={(e) =>
-                            run(() =>
-                              window.pet.setPreferences({
-                                disabledActions: e.target.checked
-                                  ? [...state.preferences.disabledActions, item.id]
-                                  : state.preferences.disabledActions.filter(
-                                      (id) => id !== item.id,
-                                    ),
-                              }),
-                            )
-                          }
-                        />
-                      </label>
-                    ))}
-                  </div>
-                  {state.preferences.disabledActions.length === 6 && (
-                    <small className="subtle">所有动作已停用，保留静态陪伴。</small>
-                  )}
-                </section>
-                <section className="settings-section">
-                  <label className="switch-row">
+                  <div className="switch-row">
                     <div>
                       <strong>开机自启</strong>
                       <small>启动桌宠，配对仍需手动进行</small>
                     </div>
-                    <input
-                      type="checkbox"
+                    <Switch
                       checked={state.preferences.autoStart}
-                      onChange={(e) =>
-                        run(() => window.pet.setPreferences({ autoStart: e.target.checked }))
+                      label="开机自启"
+                      onChange={(value) =>
+                        void run(() => window.pet.setPreferences({ autoStart: value }))
                       }
                     />
-                  </label>
+                  </div>
                 </section>
                 <button
                   className="text-button"
@@ -499,26 +688,26 @@ export function App() {
                 </footer>
               </>
             )}
-            {panel === 'composer' && (
+            {panel === 'history' && (
               <>
-                <div className="chat-status">
-                  <span className={`status-dot ${state.effective}`} />
-                  {canSend
-                    ? '两个人都在，放心说吧'
-                    : state.effective === 'busy'
-                      ? '忙碌中，草稿会为你保留'
-                      : '等待双方在线后发送'}
-                </div>
-                <div className="messages" aria-label="本次会话消息" aria-live="polite">
+                <p className="subtle history-note">
+                  记录只保留在本次运行中，取消配对或退出后清空。
+                </p>
+                <div
+                  ref={historyRef}
+                  className="messages"
+                  aria-label="本次会话消息"
+                  aria-live="polite"
+                >
                   {state.messages.length === 0 ? (
                     <div className="empty-chat">
                       <Icon name="send" size={28} />
-                      <p>打个招呼，让陪伴开始。</p>
-                      <small>文字、图片，或者一张截图。</small>
+                      <p>还没有消息</p>
+                      <small>在桌宠下方直接输入即可。</small>
                     </div>
                   ) : (
-                    state.messages.slice(-12).map((message) => (
-                      <article key={message.id} className={`message ${message.direction}`}>
+                    state.messages.map((message) => (
+                      <article key={message.id} className={'message ' + message.direction}>
                         <span className="message-name">
                           {message.direction === 'out' ? '我' : '对方'}
                         </span>
@@ -539,110 +728,72 @@ export function App() {
                             minute: '2-digit',
                           })}
                           {message.direction === 'out' &&
-                            ` · ${message.delivery === 'delivered' ? '已送达' : message.delivery === 'sending' ? '发送中' : '未确认送达'}`}
+                            ' · ' +
+                              (message.delivery === 'delivered'
+                                ? '已送达'
+                                : message.delivery === 'sending'
+                                  ? '发送中'
+                                  : '未确认送达')}
                         </small>
                       </article>
                     ))
                   )}
                 </div>
-                {draft && (
-                  <div className="draft-image">
-                    <img src={draft.dataUrl} alt="待发送图片" />
-                    <span>
-                      {draft.width} × {draft.height}
-                      <small>{(draft.bytes / 1024).toFixed(0)} KB</small>
-                    </span>
-                    <button
-                      className="icon-button"
-                      aria-label="移除待发送图片"
-                      onClick={() => setDraft(null)}
-                    >
-                      <Icon name="close" />
-                    </button>
-                  </div>
-                )}
-                <textarea
-                  aria-label="消息内容"
-                  placeholder="想说的话，写在这里…"
-                  value={text}
-                  maxLength={4000}
-                  rows={3}
-                  onChange={(e) => setText(e.target.value)}
-                  onPaste={(e) => {
-                    if ([...e.clipboardData.items].some((item) => item.type.startsWith('image/'))) {
-                      e.preventDefault();
-                      void run(async () => setDraft(await window.pet.pasteImage()));
-                    }
-                  }}
-                  onKeyDown={(e) => {
-                    if (e.ctrlKey && e.key === 'Enter' && !e.nativeEvent.isComposing) {
-                      e.preventDefault();
-                      void send();
-                    }
-                  }}
-                />
-                <div className="composer-footer">
-                  <button
-                    className="icon-button"
-                    aria-label="选择图片"
-                    title="选择图片，也可以 Ctrl+V 粘贴截图"
-                    onClick={() =>
-                      run(async () => {
-                        const image = await window.pet.chooseImage();
-                        if (image) setDraft(image);
-                      })
-                    }
-                  >
-                    <Icon name="image" />
-                  </button>
-                  <span>Ctrl + Enter 发送</span>
-                  <button
-                    className="primary send"
-                    disabled={!canSend || busy || (!text.trim() && !draft)}
-                    onClick={send}
-                  >
-                    发送
-                    <Icon name="send" size={16} />
-                  </button>
-                </div>
               </>
-            )}
-            {error && (
-              <p className="error" role="alert">
-                {error}
-              </p>
             )}
           </div>
         </section>
       )}
-      {!panel && bubble && latest && (
-        <section className="floating-panel notification" data-interactive>
-          <header>
-            <strong>对方捎来一条消息</strong>
-            <button className="icon-button" aria-label="收起消息" onClick={() => setBubble(false)}>
-              <Icon name="close" />
-            </button>
-          </header>
-          {latest.kind === 'text' ? (
-            <p>{latest.text}</p>
-          ) : (
-            <button className="message-image" onClick={() => setPreview(latest.image!)}>
-              <img src={latest.image} alt="收到的图片" />
-            </button>
-          )}
-          <button
-            className="text-button"
-            onClick={() => {
-              setBubble(false);
-              setPanel('composer');
-            }}
-          >
-            打开对话
+      {incoming.message && (
+        <section
+          ref={bubbleRef}
+          className={'speech-bubble ' + (incoming.fading ? 'fading' : '')}
+          data-interactive
+          aria-label="新消息气泡"
+          aria-live="polite"
+          data-message-id={incoming.message.id}
+          style={{
+            left: layout.bubble?.x || 0,
+            top: layout.bubble?.y || 0,
+            visibility:
+              layout.bubble &&
+              bubbleSize &&
+              layout.bubble.width === bubbleSize.width &&
+              layout.bubble.height === bubbleSize.height
+                ? 'visible'
+                : 'hidden',
+          }}
+        >
+          <div className="bubble-art" aria-hidden="true">
+            <img src="./ui/speech-bubble.png" alt="" />
+          </div>
+          <button className="bubble-close" aria-label="收起消息气泡" onClick={incoming.dismiss}>
+            <Icon name="close" size={14} />
           </button>
+          <div className="speech-content">
+            {incoming.message.kind === 'text' ? (
+              <p className="speech-text">{incoming.message.text}</p>
+            ) : (
+              <button
+                className="bubble-image"
+                aria-label="查看收到的图片"
+                onClick={() => setPreview(incoming.message!.image!)}
+              >
+                <img src={incoming.message.image} alt="收到的图片" style={bubbleImageSize} />
+              </button>
+            )}
+          </div>
         </section>
       )}
       {preview && (
-        <div className="preview" data-interactive role="dialog" aria-label="图片预览">
+        <section
+          ref={panelRef}
+          className="preview"
+          data-interactive
+          role="dialog"
+          aria-label="图片预览"
+          style={panelStyle}
+        >
           <button
             className="icon-button"
             aria-label="关闭图片预览"
@@ -651,7 +802,7 @@ export function App() {
             <Icon name="close" />
           </button>
           <img src={preview} alt="聊天图片预览" />
-        </div>
+        </section>
       )}
     </main>
   );

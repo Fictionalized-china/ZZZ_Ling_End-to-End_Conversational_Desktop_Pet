@@ -1,6 +1,6 @@
 {
   "name": "dafeyu-pet-chat",
-  "version": "0.1.1",
+  "version": "0.2.0",
   "private": true,
   "description": "铃宝：仅限双人的临时桌宠聊天",
   "main": "dist/main/index.cjs",
@@ -15,6 +15,7 @@
     "test:integration": "node scripts/integration.mjs",
     "test:desktop": "electron scripts/electron-smoke.cjs",
     "test:animation": "electron scripts/electron-animation.cjs",
+    "test:ui": "node scripts/desktop-ui.mjs",
     "test:desktop-network": "node scripts/desktop-network.mjs",
     "package": "npm run build && electron-builder --win portable --x64",
     "deploy": "wrangler deploy"
