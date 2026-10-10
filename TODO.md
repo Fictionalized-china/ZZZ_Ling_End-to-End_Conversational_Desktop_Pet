@@ -58,7 +58,8 @@
 - [x] 透明手绘气泡、内容自适应与尺寸上限、长文换行、图片预览
 - [x] 两秒淡出后按顺序切换文字／图片，取消配对清理待展示消息
 - [x] 真实 Worker + Electron 界面端到端验证，包含原生鼠标连续拖动
-- [ ] 发布包 ASAR 复测、Win10 portable 启动、根目录 exe 与 GitHub 同步
+- [x] 发布包 ASAR 复测、Win10 portable 启动、根目录 exe 与 GitHub 同步
+- [x] 从 GitHub 重新拉取，核对 0.2.0 exe、76 帧、气泡原稿／透明素材与 README
 
 ## 下一批
 
