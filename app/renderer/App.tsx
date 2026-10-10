@@ -5,7 +5,7 @@ import { usePetAnimation } from './usePetAnimation';
 import { Switch } from './Switch';
 import { useIncomingBubble } from './useIncomingBubble';
 import { useDesktopLayout } from './useDesktopLayout';
-import { dragScale, MIN_SCALE, MAX_SCALE, desktopLayout } from '../shared/layout';
+import { dragScale, MIN_SCALE, MAX_SCALE, desktopLayout, PET_TOP } from '../shared/layout';
 
 const labels = { online: '在线', offline: '不在线', busy: '忙碌' };
 type Panel = 'menu' | 'status' | 'chat' | 'quick' | null;
@@ -101,8 +101,9 @@ export function App() {
     panel,
     incoming.message?.id || 'idle',
     preview,
+    controlsOpen,
   );
-  const { canvasRef, alphaRef } = usePetAnimation(
+  const { canvasRef, alphaRef, viewportSize } = usePetAnimation(
     selectActions(
       state?.effective || 'offline',
       state?.preferences.disabledActions || DEFAULT_DISABLED_ACTIONS,
@@ -425,67 +426,18 @@ export function App() {
               openChat();
             }}
           />
-          {controlsOpen && (
-            <button
-              className={'resize-handle ' + (resizing ? 'resizing' : '')}
-              data-interactive
-              role="slider"
-              aria-label="按住拖动调整大小"
-              aria-valuemin={MIN_SCALE * 100}
-              aria-valuemax={MAX_SCALE * 100}
-              aria-valuenow={Math.round(scale * 100)}
-              aria-valuetext={Math.round(scale * 100) + '%'}
-              title="长按小圆点拖动缩放；方向键微调，Home 恢复默认"
-              onPointerDown={(e) => {
-                if (e.button !== 0) return;
-                e.preventDefault();
-                e.currentTarget.setPointerCapture(e.pointerId);
-                requestedScale.current = scale;
-                resizeDrag.current = {
-                  x: e.screenX,
-                  y: e.screenY,
-                  lastX: e.screenX,
-                  lastY: e.screenY,
-                  scale,
-                  held: false,
-                };
-                holdTimer.current = setTimeout(() => {
-                  const start = resizeDrag.current;
-                  if (!start) return;
-                  start.held = true;
-                  setResizing(true);
-                  queueScale(dragScale(start.scale, start.lastX - start.x, start.lastY - start.y));
-                }, 180);
-              }}
-              onPointerMove={(e) => {
-                const start = resizeDrag.current;
-                if (!start) return;
-                start.lastX = e.screenX;
-                start.lastY = e.screenY;
-                if (start.held)
-                  queueScale(dragScale(start.scale, e.screenX - start.x, e.screenY - start.y));
-              }}
-              onPointerUp={finishResize}
-              onPointerCancel={finishResize}
-              onLostPointerCapture={finishResize}
-              onKeyDown={(e) => {
-                if (['ArrowUp', 'ArrowRight', 'ArrowDown', 'ArrowLeft', 'Home'].includes(e.key)) {
-                  e.preventDefault();
-                  window.pet.setScale(
-                    e.key === 'Home'
-                      ? 1
-                      : scale + (e.key === 'ArrowUp' || e.key === 'ArrowRight' ? 0.02 : -0.02),
-                  );
-                }
-              }}
-            >
-              <span />
-              {resizing && <output>{Math.round(scale * 100)}%</output>}
-            </button>
-          )}
         </div>
         {controlsOpen && (
-          <div className="pet-footer" data-interactive>
+          <div
+            className="pet-footer"
+            data-interactive
+            style={{
+              left: (layout.controls?.x || 0) - layout.body.x,
+              top: (layout.controls?.y || 0) - layout.body.y,
+              width: layout.controls?.width || 304,
+              visibility: layout.controls ? 'visible' : 'hidden',
+            }}
+          >
             <nav className="toolbar" aria-label="桌宠操作">
               <button
                 className={'presence ' + state.own}
@@ -529,6 +481,81 @@ export function App() {
           </div>
         )}
       </div>
+      {controlsOpen && (
+        <button
+          className={'resize-handle ' + (resizing ? 'resizing' : '')}
+          style={{
+            left: Math.max(
+              0,
+              Math.min(
+                layout.body.x +
+                  layout.body.width / 2 -
+                  (Math.round(208 * scale) * viewportSize.width) / viewportSize.height / 2 -
+                  8,
+                layout.bubble &&
+                  layout.bubble.y + layout.bubble.height > layout.body.y + PET_TOP - 8 &&
+                  layout.bubble.y < layout.body.y + PET_TOP + 20
+                  ? layout.bubble.x - 32
+                  : Infinity,
+              ),
+            ),
+            top: layout.body.y + PET_TOP - 8,
+          }}
+          data-interactive
+          role="slider"
+          aria-label="按住拖动调整大小"
+          aria-valuemin={MIN_SCALE * 100}
+          aria-valuemax={MAX_SCALE * 100}
+          aria-valuenow={Math.round(scale * 100)}
+          aria-valuetext={Math.round(scale * 100) + '%'}
+          title="长按小圆点拖动缩放；方向键微调，Home 恢复默认"
+          onPointerDown={(e) => {
+            if (e.button !== 0) return;
+            e.preventDefault();
+            e.currentTarget.setPointerCapture(e.pointerId);
+            requestedScale.current = scale;
+            resizeDrag.current = {
+              x: e.screenX,
+              y: e.screenY,
+              lastX: e.screenX,
+              lastY: e.screenY,
+              scale,
+              held: false,
+            };
+            holdTimer.current = setTimeout(() => {
+              const start = resizeDrag.current;
+              if (!start) return;
+              start.held = true;
+              setResizing(true);
+              queueScale(dragScale(start.scale, start.lastX - start.x, start.lastY - start.y));
+            }, 180);
+          }}
+          onPointerMove={(e) => {
+            const start = resizeDrag.current;
+            if (!start) return;
+            start.lastX = e.screenX;
+            start.lastY = e.screenY;
+            if (start.held)
+              queueScale(dragScale(start.scale, e.screenX - start.x, e.screenY - start.y));
+          }}
+          onPointerUp={finishResize}
+          onPointerCancel={finishResize}
+          onLostPointerCapture={finishResize}
+          onKeyDown={(e) => {
+            if (['ArrowUp', 'ArrowRight', 'ArrowDown', 'ArrowLeft', 'Home'].includes(e.key)) {
+              e.preventDefault();
+              window.pet.setScale(
+                e.key === 'Home'
+                  ? 1
+                  : scale + (e.key === 'ArrowUp' || e.key === 'ArrowRight' ? 0.02 : -0.02),
+              );
+            }
+          }}
+        >
+          <span />
+          {resizing && <output>{Math.round(scale * 100)}%</output>}
+        </button>
+      )}
       {panel && !preview && (
         <section
           ref={panelRef}

@@ -60,7 +60,12 @@ const api: DesktopApi = {
     });
     const offsetX = next.bounds.x,
       offsetY = next.bounds.y;
-    for (const rect of [next.layout.body, next.layout.panel, next.layout.bubble]) {
+    for (const rect of [
+      next.layout.body,
+      next.layout.panel,
+      next.layout.bubble,
+      next.layout.controls,
+    ]) {
       if (rect) {
         rect.x += offsetX;
         rect.y += offsetY;

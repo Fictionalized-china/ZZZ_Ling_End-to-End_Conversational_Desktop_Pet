@@ -1,12 +1,12 @@
 export const MIN_SCALE = 0.55;
 export const MAX_SCALE = 1.35;
 export const PET_HEIGHT = 208;
-export const FOOTER_HEIGHT = 56;
 export const PET_TOP = 20;
 export type Rect = { x: number; y: number; width: number; height: number };
 export type LayoutRequest = {
   panel: { width: number; height: number } | null;
   bubble: { width: number; height: number } | null;
+  controls?: boolean;
 };
 export type DesktopLayout = {
   width: number;
@@ -14,6 +14,7 @@ export type DesktopLayout = {
   body: Rect;
   panel: Rect | null;
   bubble: Rect | null;
+  controls: Rect | null;
   maxPanelHeight: number;
 };
 const clamp = (n: number, min: number, max: number) =>
@@ -44,15 +45,13 @@ export function desktopLayout(
     x: Math.round(
       clamp(anchor.x, area.x + bodyWidth / 2 + 12, area.x + area.width - bodyWidth / 2 - 12),
     ),
-    y: Math.round(
-      clamp(anchor.y, area.y + petHeight + PET_TOP + 12, area.y + area.height - FOOTER_HEIGHT - 12),
-    ),
+    y: Math.round(clamp(anchor.y, area.y + petHeight + PET_TOP + 12, area.y + area.height)),
   };
   const body: Rect = {
     x: Math.round(center.x - bodyWidth / 2),
     y: center.y - petHeight - PET_TOP,
     width: bodyWidth,
-    height: petHeight + PET_TOP + FOOTER_HEIGHT,
+    height: petHeight + PET_TOP,
   };
   const maxPanelHeight = Math.min(520, area.height - 24);
   const fit = (rect: Rect): Rect => ({
@@ -73,29 +72,69 @@ export function desktopLayout(
       height,
     });
   }
+  const overlaps = (a: Rect, b: Rect) =>
+    a.x < b.x + b.width && a.x + a.width > b.x && a.y < b.y + b.height && a.y + a.height > b.y;
+  const within = (r: Rect) =>
+    r.x >= area.x + 12 &&
+    r.y >= area.y + 12 &&
+    r.x + r.width <= area.x + area.width - 12 &&
+    r.y + r.height <= area.y + area.height;
   let bubble: Rect | null = null;
   if (request.bubble) {
     const width = Math.min(340, area.width - 24, Math.max(60, Math.ceil(request.bubble.width)));
     const height = Math.min(260, area.height - 24, Math.max(40, Math.ceil(request.bubble.height)));
-    const overlaps = (a: Rect, b: Rect) =>
-      a.x < b.x + b.width && a.x + a.width > b.x && a.y < b.y + b.height && a.y + a.height > b.y;
-    // 趴姿脑袋位于人物左侧；云朵右下尾巴朝向脑袋，优先停在其左上。
+    // 按参照图向左 18、向下 60 DIP，尾巴靠近脑袋左上侧的留白。
+    // 这里允许云朵进入人物画布左上角的透明区，不能以整个窗口作为障碍。
     const headX = center.x - petHeight * 0.42;
     const candidates = [
-      { x: headX - width * 0.78, y: body.y - height - 2, width, height },
+      { x: headX - width * 0.78 - 18, y: body.y - height + 58, width, height },
       { x: body.x - width - 12, y: body.y, width, height },
       { x: body.x + body.width + 12, y: body.y, width, height },
       { x: center.x - width / 2, y: body.y + body.height + 8, width, height },
     ];
     bubble =
-      candidates.map(fit).find((r) => !overlaps(r, body) && (!panel || !overlaps(r, panel))) ||
-      fit(candidates[0]);
+      within(candidates[0]) && (!panel || !overlaps(candidates[0], panel))
+        ? fit(candidates[0])
+        : candidates
+            .slice(1)
+            .map(fit)
+            .find((r) => !overlaps(r, body) && (!panel || !overlaps(r, panel))) ||
+          fit(candidates[0]);
   }
-  const widgets = [body, ...(panel ? [panel] : []), ...(bubble ? [bubble] : [])];
+  let controls: Rect | null = null;
+  if (request.controls) {
+    const width = Math.min(304, area.width - 24),
+      height = 36;
+    const above = Math.min(body.y, bubble?.y ?? body.y) - height - 8;
+    const candidates = [
+      { x: center.x - width / 2, y: center.y + 8, width, height },
+      { x: center.x - width / 2, y: body.y - height - 8, width, height },
+      { x: center.x - width / 2, y: above, width, height },
+      { x: body.x + body.width + 12, y: center.y - height, width, height },
+      { x: body.x - width - 12, y: center.y - height, width, height },
+    ];
+    controls =
+      candidates
+        .filter(within)
+        .find(
+          (r) =>
+            !overlaps(r, body) &&
+            (!panel || !overlaps(r, panel)) &&
+            (!bubble || !overlaps(r, bubble)),
+        ) || fit(candidates[2]);
+  }
+  const widgets = [
+    body,
+    ...(panel ? [panel] : []),
+    ...(bubble ? [bubble] : []),
+    ...(controls ? [controls] : []),
+  ];
   const x = Math.floor(Math.min(...widgets.map((r) => r.x)) - 8);
   const y = Math.floor(Math.min(...widgets.map((r) => r.y)) - 8);
   const width = Math.ceil(Math.max(...widgets.map((r) => r.x + r.width)) + 8 - x);
-  const height = Math.ceil(Math.max(...widgets.map((r) => r.y + r.height)) + 8 - y);
+  const height = Math.ceil(
+    Math.min(area.y + area.height, Math.max(...widgets.map((r) => r.y + r.height)) + 8) - y,
+  );
   const local = (r: Rect): Rect => ({ ...r, x: r.x - x, y: r.y - y });
   return {
     bounds: { x, y, width, height },
@@ -106,6 +145,7 @@ export function desktopLayout(
       body: local(body),
       panel: panel ? local(panel) : null,
       bubble: bubble ? local(bubble) : null,
+      controls: controls ? local(controls) : null,
       maxPanelHeight,
     } satisfies DesktopLayout,
   };

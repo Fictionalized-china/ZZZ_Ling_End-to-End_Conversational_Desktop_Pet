@@ -92,6 +92,7 @@ textarea {
   cursor: grabbing;
 }
 .resize-handle {
+  z-index: 4;
   position: absolute;
   left: -8px;
   top: -8px;
@@ -130,10 +131,7 @@ textarea {
 }
 .pet-footer {
   position: absolute;
-  top: calc(20px + var(--pet-height) + 8px);
-  left: 50%;
-  transform: translateX(-50%);
-  width: min(360px, calc(100% - 16px));
+  height: 36px;
   pointer-events: auto;
 }
 .presence {
@@ -188,7 +186,7 @@ textarea {
   padding: 3px;
   box-shadow: 0 6px 18px #32484918;
   pointer-events: auto;
-  width: max-content;
+  width: 100%;
   margin: 0 auto;
   height: 36px;
 }

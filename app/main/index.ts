@@ -56,8 +56,15 @@ const state: AppState = {
   notice: '打开菜单，与另一台电脑配对',
   dock: 'right',
 };
+function liveWindow() {
+  return !quitting && win && !win.isDestroyed() && !win.webContents.isDestroyed() ? win : undefined;
+}
+function trustedSender(event: Electron.IpcMainEvent | Electron.IpcMainInvokeEvent) {
+  const current = liveWindow();
+  return !!current && event.sender === current.webContents;
+}
 function broadcast() {
-  if (win && !win.isDestroyed()) win.webContents.send('pet:update', state);
+  liveWindow()?.webContents.send('pet:update', state);
 }
 async function save() {
   const dir = app.getPath('userData');
@@ -73,16 +80,17 @@ function scheduleSave() {
   saveTimer = setTimeout(() => void save().catch(() => {}), 400);
 }
 function applyLayout() {
-  if (!win) return;
+  const current = liveWindow();
+  if (!current) return;
   const area = screen.getDisplayNearestPoint(anchor).workArea;
   const next = desktopLayout(anchor, state.preferences.scale, layoutRequest, area);
   anchor = next.anchor;
   state.preferences.anchorX = anchor.x;
   state.preferences.anchorY = anchor.y;
   state.layout = next.layout;
-  const old = win.getBounds();
+  const old = current.getBounds();
   if (Object.entries(next.bounds).some(([key, value]) => old[key as keyof typeof old] !== value))
-    win.setBounds(next.bounds);
+    current.setBounds(next.bounds);
   broadcast();
 }
 function toDraft(image: Electron.NativeImage): DraftImage {
@@ -106,7 +114,7 @@ function toDraft(image: Electron.NativeImage): DraftImage {
 function registerIpc() {
   const handle = (name: string, callback: (...args: any[]) => unknown) =>
     ipcMain.handle(name, async (event, ...args) => {
-      if (event.sender !== win?.webContents) return { ok: false, error: '无效窗口' };
+      if (!trustedSender(event)) return { ok: false, error: '无效窗口' };
       try {
         return { ok: true, value: await callback(...args) };
       } catch (error) {
@@ -181,6 +189,7 @@ function registerIpc() {
       next.relayUrl = patch.relayUrl ? normalizeRelay(patch.relayUrl) : '';
       if (next.relayUrl !== state.preferences.relayUrl) await relay.cancel(false);
     }
+    if (!liveWindow()) throw new Error('程序正在退出');
     if ('autoStart' in patch) {
       if (typeof patch.autoStart !== 'boolean') throw new Error('设置无效');
       const executable = process.env.PORTABLE_EXECUTABLE_FILE || app.getPath('exe');
@@ -189,14 +198,14 @@ function registerIpc() {
       next.autoStart = patch.autoStart;
     }
     state.preferences = next;
-    if ('alwaysOnTop' in patch) win?.setAlwaysOnTop(next.alwaysOnTop, 'floating');
+    if ('alwaysOnTop' in patch) liveWindow()?.setAlwaysOnTop(next.alwaysOnTop, 'floating');
     if ('scale' in patch) applyLayout();
     await save();
     broadcast();
   });
   ipcMain.on('pet:move', (event, dx, dy) => {
     if (
-      event.sender !== win?.webContents ||
+      !trustedSender(event) ||
       !Number.isFinite(dx) ||
       !Number.isFinite(dy) ||
       Math.abs(dx) > 2000 ||
@@ -208,7 +217,7 @@ function registerIpc() {
     scheduleSave();
   });
   ipcMain.on('pet:layout', (event, value) => {
-    if (event.sender !== win?.webContents || !value || typeof value !== 'object') return;
+    if (!trustedSender(event) || !value || typeof value !== 'object') return;
     const valid = (size: unknown) =>
       size === null ||
       (typeof size === 'object' &&
@@ -219,13 +228,18 @@ function registerIpc() {
         (size as any).width <= 600 &&
         (size as any).height > 0 &&
         (size as any).height <= 600);
-    if (!valid(value.panel) || !valid(value.bubble)) return;
+    if (
+      !valid(value.panel) ||
+      !valid(value.bubble) ||
+      (value.controls !== undefined && typeof value.controls !== 'boolean')
+    )
+      return;
     if (JSON.stringify(value) === JSON.stringify(layoutRequest)) return;
-    layoutRequest = { panel: value.panel, bubble: value.bubble };
+    layoutRequest = { panel: value.panel, bubble: value.bubble, controls: value.controls === true };
     applyLayout();
   });
   ipcMain.on('pet:scale', (event, value) => {
-    if (event.sender !== win?.webContents || !Number.isFinite(value)) return;
+    if (!trustedSender(event) || !Number.isFinite(value)) return;
     const scale = scaleAtAnchor(
       clampScale(value),
       anchor,
@@ -237,11 +251,11 @@ function registerIpc() {
     scheduleSave();
   });
   ipcMain.on('pet:interactive', (event, value) => {
-    if (event.sender === win?.webContents && typeof value === 'boolean')
-      win?.setIgnoreMouseEvents(!value, { forward: true });
+    if (trustedSender(event) && typeof value === 'boolean')
+      liveWindow()?.setIgnoreMouseEvents(!value, { forward: true });
   });
   ipcMain.on('pet:quit', (event) => {
-    if (event.sender === win?.webContents) app.quit();
+    if (trustedSender(event)) app.quit();
   });
 }
 
@@ -277,7 +291,7 @@ app.whenReady().then(async () => {
       state.preferences.anchorY ??
       (state.preferences.y !== undefined
         ? state.preferences.y + 208 * state.preferences.scale + 30
-        : area.y + area.height - 150),
+        : area.y + area.height),
   };
   anchor = { x: Math.round(anchor.x), y: Math.round(anchor.y) };
   win = new BrowserWindow({
@@ -302,6 +316,9 @@ app.whenReady().then(async () => {
       devTools: !app.isPackaged,
     },
   });
+  win.once('closed', () => {
+    win = undefined;
+  });
   win.webContents.setWindowOpenHandler(() => ({ action: 'deny' }));
   win.webContents.on('will-navigate', (event) => event.preventDefault());
   win.webContents.session.setPermissionRequestHandler((_contents, _permission, callback) =>
@@ -315,15 +332,19 @@ app.whenReady().then(async () => {
   win.setIgnoreMouseEvents(true, { forward: true });
   if (process.env.PET_DEV_URL && !app.isPackaged) await win.loadURL(process.env.PET_DEV_URL);
   else await win.loadFile(path.join(__dirname, '../ui/index.html'));
-  win.webContents.once('did-finish-load', broadcast);
-  powerMonitor.on('suspend', () => relay.reconnect());
-  powerMonitor.on('resume', () => relay.reconnect());
+  broadcast();
+  powerMonitor.on('suspend', () => {
+    if (!quitting) relay.reconnect();
+  });
+  powerMonitor.on('resume', () => {
+    if (!quitting) relay.reconnect();
+  });
   screen.on('display-metrics-changed', () => applyLayout());
   screen.on('display-removed', () => applyLayout());
 });
 app.on('second-instance', () => {
-  win?.show();
-  win?.focus();
+  liveWindow()?.show();
+  liveWindow()?.focus();
 });
 app.on('window-all-closed', () => app.quit());
 app.on('before-quit', (event) => {
@@ -332,7 +353,7 @@ app.on('before-quit', (event) => {
   quitting = true;
   clearTimeout(saveTimer);
   void Promise.race([
-    Promise.all([relay.cancel(false), save()]),
+    Promise.allSettled([relay.cancel(false), save()]),
     new Promise((resolve) => setTimeout(resolve, 4500)),
   ]).finally(() => app.quit());
 });

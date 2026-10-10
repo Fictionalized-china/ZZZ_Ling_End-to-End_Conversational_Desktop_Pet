@@ -1,6 +1,6 @@
 import { randomBytes, randomUUID } from 'node:crypto';
 import { EventEmitter } from 'node:events';
-import { net, session } from 'electron';
+import { session } from 'electron';
 import WebSocket from 'ws';
 import { HttpsProxyAgent } from 'https-proxy-agent';
 import {
@@ -15,6 +15,16 @@ import {
   type Snapshot,
 } from '../shared/protocol';
 import type { AppState, ChatMessage } from '../shared/desktop';
+import { withNetworkRetry, retryableNetworkError, type NetworkRoute } from '../shared/network';
+
+let directSession: Promise<Electron.Session> | undefined;
+function getDirectSession() {
+  return (directSession ||= (async () => {
+    const direct = session.fromPartition('dafeyu-relay-direct', { cache: false });
+    await direct.setProxy({ mode: 'direct' });
+    return direct;
+  })());
+}
 
 export function normalizeRelay(value: string) {
   const url = new URL(value.trim());
@@ -40,6 +50,7 @@ export class Relay extends EventEmitter {
   private epoch = -1;
   private pending = new Map<string, NodeJS.Timeout>();
   private seen = new Set<string>();
+  private route: NetworkRoute = 'system';
   constructor(public state: AppState) {
     super();
   }
@@ -52,19 +63,42 @@ export class Relay extends EventEmitter {
   }
   private async request(path: string, token: string, body?: unknown, timeout = 12_000) {
     const url = normalizeRelay(this.state.preferences.relayUrl);
-    const response = await net.fetch(url + path, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        ...(token ? { Authorization: `Bearer ${token}` } : {}),
+    const generation = this.generation;
+    const result = await withNetworkRetry(
+      async (route, signal) => {
+        const network = route === 'direct' ? await getDirectSession() : session.defaultSession;
+        const response = await network.fetch(url + path, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            ...(token ? { Authorization: `Bearer ${token}` } : {}),
+          },
+          body: body ? JSON.stringify(body) : '{}',
+          signal,
+          cache: 'no-store',
+        });
+        let data: any;
+        try {
+          data = await response.json();
+        } catch (error) {
+          if (retryableNetworkError(error)) throw error;
+          throw new Error(`中继返回异常响应（HTTP ${response.status}），请稍后重试`);
+        }
+        if (!response.ok)
+          throw new Error(
+            typeof data?.error === 'string' ? data.error : `连接失败（HTTP ${response.status}）`,
+          );
+        return data;
       },
-      body: body ? JSON.stringify(body) : '{}',
-      signal: AbortSignal.timeout(timeout),
-      cache: 'no-store',
-    });
-    const data = await response.json();
-    if (!response.ok) throw new Error(data.error || `连接失败（${response.status}）`);
-    return data;
+      this.route,
+      timeout,
+      () => {
+        if (generation === this.generation && this.state.connection === 'connecting')
+          this.notice('连接中断，正在自动重试…');
+      },
+    );
+    if (generation === this.generation) this.route = result.route;
+    return result.value;
   }
   async create() {
     if (this.room && (this.state.paired || this.state.codeExpiresAt > Date.now())) return;
@@ -77,6 +111,8 @@ export class Relay extends EventEmitter {
     const token = randomBytes(32).toString('hex');
     try {
       const data = await this.request('/v1/rooms', '', { token });
+      if (!data || !CODE_PATTERN.test(data.code) || !Number.isFinite(data.expiresAt))
+        throw new Error('中继未返回有效配对码，请检查连接地址');
       if (generation !== this.generation) {
         await this.request(`/v1/rooms/${data.code}/leave`, token).catch(() => {});
         return;
@@ -127,19 +163,30 @@ export class Relay extends EventEmitter {
     if (!this.token || generation !== this.generation) return;
     const http = normalizeRelay(this.state.preferences.relayUrl);
     const url = http.replace(/^http/, 'ws') + `/v1/rooms/${this.room}/socket`;
-    const proxy = await session.defaultSession.resolveProxy(http).catch(() => 'DIRECT');
+    const proxy =
+      this.route === 'direct'
+        ? 'DIRECT'
+        : await session.defaultSession.resolveProxy(http).catch(() => 'DIRECT');
     if (generation !== this.generation) return;
-    const proxyHost = proxy.match(/(?:^|;)\s*(?:PROXY|HTTPS)\s+([^;]+)/)?.[1];
+    const proxyMatch = proxy.match(/(?:^|;)\s*(PROXY|HTTPS)\s+([^;]+)/);
     const ws = new WebSocket(url, {
       headers: { Authorization: `Bearer ${this.token}`, 'X-Presence': this.state.own },
-      handshakeTimeout: 12_000,
+      handshakeTimeout: 6000,
       maxPayload: MAX_IMAGE + 4096,
       perMessageDeflate: false,
-      ...(proxyHost ? { agent: new HttpsProxyAgent(`http://${proxyHost}`) } : {}),
+      ...(proxyMatch
+        ? {
+            agent: new HttpsProxyAgent(
+              `${proxyMatch[1] === 'HTTPS' ? 'https' : 'http'}://${proxyMatch[2]}`,
+            ),
+          }
+        : {}),
     });
     this.socket = ws;
     this.epoch = -1;
+    let opened = false;
     ws.on('open', () => {
+      opened = true;
       if (generation !== this.generation) {
         ws.close();
         return;
@@ -236,8 +283,11 @@ export class Relay extends EventEmitter {
         this.notice('收到无法识别的数据，已忽略');
       }
     });
-    ws.on('error', () => {
-      if (generation === this.generation) this.notice('暂时无法连接中继，正在重试');
+    ws.on('error', (error) => {
+      if (generation !== this.generation || ws !== this.socket) return;
+      if (!opened && retryableNetworkError(error))
+        this.route = this.route === 'system' ? 'direct' : 'system';
+      this.notice('暂时无法连接中继，正在重试');
     });
     ws.on('close', (code) => {
       if (generation !== this.generation || ws !== this.socket) return;

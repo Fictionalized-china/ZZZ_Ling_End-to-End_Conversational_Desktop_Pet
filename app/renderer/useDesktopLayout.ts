@@ -4,6 +4,7 @@ export function useDesktopLayout(
   panel: string | null,
   messageId?: string,
   preview?: string | null,
+  controls = false,
 ) {
   const panelRef = useRef<HTMLElement>(null),
     bubbleRef = useRef<HTMLElement>(null);
@@ -20,6 +21,7 @@ export function useDesktopLayout(
       const request = {
         panel: panel || preview ? size(panelRef.current) : null,
         bubble: messageId ? size(bubbleRef.current) : null,
+        controls,
       };
       const key = JSON.stringify(request);
       if (key !== previous) {
@@ -37,6 +39,6 @@ export function useDesktopLayout(
     if (bubbleRef.current) observer.observe(bubbleRef.current);
     report();
     return () => observer.disconnect();
-  }, [ready, panel, messageId, preview]);
+  }, [ready, panel, messageId, preview, controls]);
   return { panelRef, bubbleRef, bubbleSize };
 }

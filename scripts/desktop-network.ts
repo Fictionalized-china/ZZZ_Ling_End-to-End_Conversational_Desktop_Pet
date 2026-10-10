@@ -4,6 +4,7 @@ import { readFile } from 'node:fs/promises';
 import { Relay } from '../app/main/relay';
 import type { AppState } from '../app/shared/desktop';
 import { animationPreferences } from '../app/shared/actions';
+import { createServer } from 'node:http';
 const fresh = (): AppState => ({
   preferences: {
     ...animationPreferences(),
@@ -34,6 +35,33 @@ const until = async (check: () => boolean, label: string) => {
 app.whenReady().then(async () => {
   if (process.env.DAFEYU_TEST_DIRECT === '1')
     await session.defaultSession.setProxy({ mode: 'direct' });
+  let brokenProxy: ReturnType<typeof createServer> | undefined;
+  if (process.env.DAFEYU_TEST_CLOSED_PROXY === '1') {
+    brokenProxy = createServer((_request, response) => response.destroy());
+    brokenProxy.on('connect', (_request, socket) => {
+      socket.write('HTTP/1.1 200 Connection Established\r\n\r\n');
+      // Close during TLS negotiation, reproducing Chromium's CONNECTION_CLOSED.
+      socket.once('data', () => socket.end());
+    });
+    await new Promise<void>((resolve) => brokenProxy!.listen(0, '127.0.0.1', resolve));
+    const address = brokenProxy.address();
+    if (!address || typeof address === 'string') throw Error('Proxy fixture unavailable');
+    await session.defaultSession.setProxy({
+      proxyRules: `127.0.0.1:${address.port}`,
+      proxyBypassRules: '<-loopback>',
+    });
+    let reproduced = '';
+    try {
+      await session.defaultSession.fetch(fresh().preferences.relayUrl + '/health');
+    } catch (error) {
+      reproduced = error instanceof Error ? error.message : String(error);
+    }
+    assert.match(
+      reproduced,
+      /ERR_(CONNECTION_CLOSED|EMPTY_RESPONSE|CONNECTION_RESET|TUNNEL_CONNECTION_FAILED)/,
+    );
+    console.log('Reproduced raw network failure:', reproduced);
+  }
   const host = new Relay(fresh()),
     guest = new Relay(fresh());
   let failed = false;
@@ -84,6 +112,10 @@ app.whenReady().then(async () => {
       'PASS actual Electron clients: pairing, text, image, busy gate, receipts and cancellation cleanup',
     );
     if (process.env.DAFEYU_TEST_DIRECT === '1') console.log('Network mode: direct (no proxy)');
+    if (brokenProxy)
+      console.log(
+        'PASS automatic recovery from closed proxy; HTTP and WebSocket use the recovered route',
+      );
   } catch (error) {
     failed = true;
     console.error(error);
@@ -96,6 +128,7 @@ app.whenReady().then(async () => {
     );
   } finally {
     await Promise.all([host.cancel(false), guest.cancel(false)]);
+    brokenProxy?.close();
     app.exit(failed ? 1 : 0);
   }
 });

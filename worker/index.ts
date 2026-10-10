@@ -88,18 +88,23 @@ export default {
         const input = await body(request);
         if (typeof input.token !== 'string' || !tokenPattern.test(input.token))
           return json({ error: '无效的连接凭证' }, 400);
-        const code = [...crypto.getRandomValues(new Uint8Array(10))]
-          .map((n) => alphabet[n % alphabet.length])
-          .join('');
+        const hostHash = await hash(input.token);
+        // A retry with the same 256-bit token reaches the same room. This avoids
+        // orphan invites when the response is lost after the server creates it.
+        const code = Array.from(
+          { length: 10 },
+          (_, i) => alphabet[parseInt(hostHash.slice(i * 2, i * 2 + 2), 16) % alphabet.length],
+        ).join('');
         const stub = env.ROOMS.getByName(code);
         const result = await stub.fetch(
           new Request('https://room/create', {
             method: 'POST',
-            body: JSON.stringify({ hash: await hash(input.token) }),
+            body: JSON.stringify({ hash: hostHash }),
           }),
         );
         if (!result.ok) return result;
-        return json({ code, expiresAt: Date.now() + INVITE_MS });
+        const created = await result.json<{ expiresAt: number }>();
+        return json({ code, expiresAt: created.expiresAt });
       }
       const match = url.pathname.match(/^\/v1\/rooms\/([A-Z2-9]+)\/(join|socket|leave)$/);
       if (!match || !CODE_PATTERN.test(match[1])) return json({ error: '配对码无效' }, 404);
@@ -110,7 +115,12 @@ export default {
         return json({ error: '请求方式无效' }, 405);
       const token = request.headers.get('Authorization')?.replace(/^Bearer /, '') || '';
       if (!tokenPattern.test(token)) return json({ error: '缺少连接凭证' }, 401);
-      const internal = new Request(`https://room/${match[2]}`, request);
+      // Join/leave do not forward a body stream into the Durable Object. Finish
+      // reading it before returning, including when a client closes abruptly.
+      if (match[2] !== 'socket') await body(request);
+      const headers = new Headers(request.headers);
+      headers.delete('Content-Length');
+      const internal = new Request(`https://room/${match[2]}`, { method: request.method, headers });
       internal.headers.set('X-Token-Hash', await hash(token));
       internal.headers.delete('Authorization');
       return env.ROOMS.getByName(match[1]).fetch(internal);
@@ -223,8 +233,11 @@ export class PairRoom extends DurableObject<Env> {
     const path = new URL(request.url).pathname,
       token = request.headers.get('X-Token-Hash') || '';
     if (path === '/create') {
-      if (this.meta) return json({ error: '请重新生成配对码' }, 409);
       const input = await request.json<{ hash: string }>();
+      if (this.meta)
+        return this.meta.host === input.hash
+          ? json({ ok: true, expiresAt: this.meta.expires })
+          : json({ error: '请重新生成配对码' }, 409);
       this.meta = {
         host: input.hash,
         expires: Date.now() + INVITE_MS,
@@ -233,7 +246,7 @@ export class PairRoom extends DurableObject<Env> {
       };
       await this.ctx.storage.put('control', this.meta);
       this.armAlarm();
-      return json({ ok: true });
+      return json({ ok: true, expiresAt: this.meta.expires });
     }
     await this.expireIfNeeded();
     if (!this.meta) return json({ error: '配对码不存在或已经取消' }, 404);

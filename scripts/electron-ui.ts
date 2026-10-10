@@ -1,5 +1,7 @@
 import { app, screen, ipcMain, type BrowserWindow } from 'electron';
 import path from 'node:path';
+import { execFile } from 'node:child_process';
+import { promisify } from 'node:util';
 import fs from 'node:fs';
 import assert from 'node:assert/strict';
 import { Relay } from '../app/main/relay';
@@ -140,6 +142,33 @@ app.on('browser-window-created', (_event, win: BrowserWindow) => {
         x: Math.round(base.x),
         y: Math.round(base.y),
       }).workArea;
+      const edgePrefs = (await state()).preferences;
+      await js(
+        `window.pet.moveBy(${Math.round(area.x + area.width * 0.5 - edgePrefs.anchorX!)}, ${Math.round(area.y + area.height - edgePrefs.anchorY!)})`,
+      );
+      await wait(180);
+      const atTaskbar = await anchor();
+      assert.equal(atTaskbar.y, area.y + area.height, 'Character must reach the taskbar top');
+      await click('[aria-label="收起操作栏"]');
+      assert.equal(win.getBounds().y + win.getBounds().height, area.y + area.height);
+      const feetGap = await js(
+        `(()=>{const c=document.querySelector('canvas.pet'),r=c.getBoundingClientRect(),data=c.getContext('2d').getImageData(0,0,c.width,c.height).data;let bottom=-1;for(let y=c.height-1;y>=0&&bottom<0;y--)for(let x=0;x<c.width;x++)if(data[(y*c.width+x)*4+3]>25){bottom=y;break;}return (c.height-bottom-1)*r.height/c.height;})()`,
+      );
+      assert.ok(feetGap <= 6, `Visible feet gap ${feetGap}`);
+      await capture('ui-taskbar');
+      await toolbar('状态');
+      await stable('taskbar-status', atTaskbar);
+      const controlsInside = await js(
+        `(()=>{const r=document.querySelector('.toolbar').getBoundingClientRect();return r.top>=0 && r.bottom<=innerHeight})()`,
+      );
+      assert.equal(controlsInside, true);
+      await capture('ui-taskbar-controls');
+      await click('[aria-label="关闭弹窗"]');
+      await click('[aria-label="打开快捷聊天"]');
+      await stable('taskbar-quick', atTaskbar);
+      await click('[aria-label="关闭弹窗"]');
+      await toolbar('状态');
+      await click('[aria-label="关闭弹窗"]');
       const beforeMove = (await state()).preferences;
       await js(
         `window.pet.moveBy(${Math.round(area.x + area.width * 0.5 - beforeMove.anchorX!)}, ${Math.round(area.y + area.height * 0.6 - beforeMove.anchorY!)})`,
@@ -154,67 +183,37 @@ app.on('browser-window-created', (_event, win: BrowserWindow) => {
         globalY = bounds.y + Math.round(handle.y);
       win.setIgnoreMouseEvents(false);
       win.focus();
-      await js(
-        `window.__pointerLog=[];for(const name of ['pointerdown','pointermove','pointerup','lostpointercapture'])document.addEventListener(name,e=>window.__pointerLog.push({name,buttons:e.buttons,target:e.target.className,screenX:e.screenX,screenY:e.screenY,clientX:e.clientX,clientY:e.clientY}));`,
+      // sendInputEvent 不会按下 Windows 的真实鼠标键；窗口移动时系统发来的
+      // buttons=0 会取消合成事件的 capture。这里用一次真正的按住/移动/释放。
+      const nativeStart = screen.dipToScreenPoint({ x: globalX, y: globalY });
+      const dpiScale = screen.getDisplayNearestPoint({ x: globalX, y: globalY }).scaleFactor;
+      scaleEvents.length = 0;
+      await promisify(execFile)(
+        'powershell.exe',
+        [
+          '-NoProfile',
+          '-ExecutionPolicy',
+          'Bypass',
+          '-File',
+          path.resolve('scripts/native-resize.ps1'),
+          '-X',
+          String(nativeStart.x),
+          '-Y',
+          String(nativeStart.y),
+          '-DpiScale',
+          String(dpiScale),
+          '-Window',
+          win.getNativeWindowHandle().readBigUInt64LE().toString(),
+        ],
+        { windowsHide: true, timeout: 10000 },
       );
-      win.webContents.sendInputEvent({
-        type: 'mouseMove',
-        x: Math.round(handle.x),
-        y: Math.round(handle.y),
-        globalX,
-        globalY,
-      });
-      await wait(50);
-      win.webContents.sendInputEvent({
-        type: 'mouseDown',
-        x: Math.round(handle.x),
-        y: Math.round(handle.y),
-        globalX,
-        globalY,
-        button: 'left',
-        clickCount: 1,
-      });
-      await wait(240);
-      win.webContents.sendInputEvent({
-        type: 'mouseMove',
-        x: Math.round(handle.x) - 20,
-        y: Math.round(handle.y) - 30,
-        globalX: globalX - 20,
-        globalY: globalY - 30,
-        button: 'left',
-        modifiers: ['leftButtonDown'],
-      });
-      await wait(120);
-      const firstDragScale = (await state()).preferences.scale;
-      const secondBounds = win.getBounds();
-      win.webContents.sendInputEvent({
-        type: 'mouseMove',
-        x: globalX - 36 - secondBounds.x,
-        y: globalY - 48 - secondBounds.y,
-        globalX: globalX - 36,
-        globalY: globalY - 48,
-        button: 'left',
-        modifiers: ['leftButtonDown'],
-      });
-      await wait(120);
-      const movedBounds = win.getBounds();
-      win.webContents.sendInputEvent({
-        type: 'mouseUp',
-        x: globalX - 36 - movedBounds.x,
-        y: globalY - 48 - movedBounds.y,
-        globalX: globalX - 36,
-        globalY: globalY - 48,
-        button: 'left',
-        clickCount: 1,
-      });
       await wait(150);
       const draggedScale = (await state()).preferences.scale;
-      if (draggedScale === 1)
-        console.log('Resize input diagnostics:', await js('window.__pointerLog'), scaleEvents);
+      const dragSteps = [...new Set(scaleEvents.filter((value) => value > 1))];
       assert.ok(draggedScale > 1 && draggedScale < 1.35, `Native drag scale ${draggedScale}`);
       assert.ok(
-        draggedScale > firstDragScale,
-        'Pointer capture must survive resizing for continuous drag',
+        dragSteps.length >= 2 && dragSteps.at(-1)! > dragSteps[0],
+        `Pointer capture must survive resizing: ${JSON.stringify(dragSteps)}`,
       );
       await stable('native-resize', middle);
       await js('window.pet.setScale(1)');
@@ -412,6 +411,7 @@ app.on('browser-window-created', (_event, win: BrowserWindow) => {
             passed: true,
             positions,
             draggedScale,
+            taskbarFeetGap: feetGap,
             replacementMilliseconds: elapsed,
             fadingOpacity,
             shortSize,

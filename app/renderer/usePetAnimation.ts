@@ -1,4 +1,4 @@
-import { useEffect, useRef } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { ACTIONS, animationFrameAt, framePath, type ActionId } from '../shared/actions';
 
 type AlphaMask = { width: number; height: number; data: Uint8Array };
@@ -66,6 +66,7 @@ export function usePetAnimation(
   onError: (message: string) => void,
 ) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
+  const [viewportSize, setViewportSize] = useState({ width: 395, height: 229 });
   const alphaRef = useRef<(AlphaMask & { x: number; y: number }) | null>(null);
   const key = choices.map((a) => a.id).join(',');
   useEffect(() => {
@@ -90,6 +91,11 @@ export function usePetAnimation(
             if (canvas.width !== viewport.width || canvas.height !== viewport.height) {
               canvas.width = viewport.width;
               canvas.height = viewport.height;
+              setViewportSize((current) =>
+                current.width === viewport.width && current.height === viewport.height
+                  ? current
+                  : { width: viewport.width, height: viewport.height },
+              );
             }
             ctx.clearRect(0, 0, canvas.width, canvas.height);
             ctx.drawImage(frames[frame].image, -viewport.x, -viewport.y);
@@ -113,5 +119,5 @@ export function usePetAnimation(
       cancelAnimationFrame(request);
     };
   }, [key, ready, reducedMotion, onError]);
-  return { canvasRef, alphaRef };
+  return { canvasRef, alphaRef, viewportSize };
 }

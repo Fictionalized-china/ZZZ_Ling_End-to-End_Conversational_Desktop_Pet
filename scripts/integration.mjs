@@ -98,6 +98,13 @@ try {
   cleanupCode = code;
   cleanupToken = hostToken;
   assert.match(code, /^[A-HJ-NP-Z2-9]{10}$/);
+  const retried = await post('/v1/rooms', '', { token: hostToken });
+  assert.equal(retried.status, 200);
+  assert.deepEqual(
+    retried.body,
+    created.body,
+    'Lost-response retry must reuse the same invite and expiry',
+  );
   const host = await connect(code, hostToken);
   assert.equal(host.state.effective, 'offline');
   const forbidden = randomUUID();

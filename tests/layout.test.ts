@@ -12,6 +12,12 @@ describe('人物屏幕锚点独立于窗口外框', () => {
         for (const y of [area.y, area.y + area.height]) {
           const base = desktopLayout({ x, y }, 1, { panel: null, bubble: null }, area);
           for (const request of [
+            { panel: null, bubble: { width: 88, height: 62 }, controls: true },
+            {
+              panel: { width: 316, height: 520 },
+              bubble: { width: 296, height: 184 },
+              controls: true,
+            },
             { panel: { width: 316, height: 520 }, bubble: null },
             { panel: null, bubble: { width: 180, height: 90 } },
             { panel: { width: 420, height: 340 }, bubble: { width: 320, height: 220 } },
@@ -29,6 +35,46 @@ describe('人物屏幕锚点独立于窗口外框', () => {
         }
     });
   }
+  it('人物底边贴合任务栏，操作栏与面板展开不会向上推人物', () => {
+    const area = { x: 0, y: 0, width: 1920, height: 1040 };
+    for (const scale of [0.55, 1, 1.35]) {
+      const base = desktopLayout(
+        { x: 960, y: 1400 },
+        scale,
+        { panel: null, bubble: { width: 88, height: 62 } },
+        area,
+      );
+      expect(base.anchor.y).toBe(1040);
+      expect(base.bounds.y + base.bounds.height).toBe(1040);
+      for (const panel of [null, { width: 356, height: 520 }]) {
+        const next = desktopLayout(
+          base.anchor,
+          scale,
+          { panel, bubble: { width: 88, height: 62 }, controls: true },
+          area,
+        );
+        expect(next.anchor).toEqual(base.anchor);
+        expect(next.bounds.y + next.layout.body.y + next.layout.body.height).toBe(1040);
+        expect(next.bounds.y + next.layout.controls!.y + next.layout.controls!.height).toBeLessThan(
+          1040 - Math.round(208 * scale),
+        );
+      }
+    }
+  });
+  it('小气泡按参照向左下移动，保持人物锚点', () => {
+    const area = { x: 0, y: 0, width: 1920, height: 1040 };
+    const next = desktopLayout(
+      { x: 960, y: 624 },
+      1,
+      { panel: null, bubble: { width: 88, height: 62 } },
+      area,
+    );
+    const cloud = next.layout.bubble!,
+      body = next.layout.body;
+    expect(next.bounds.x + cloud.x).toBeCloseTo(Math.round(960 - 208 * 0.42 - 88 * 0.78 - 18), 0);
+    expect(cloud.y - body.y).toBe(-4);
+    expect(next.anchor).toEqual({ x: 960, y: 624 });
+  });
   it('拖动按位移连续缩放，限制大小且保持锚点', () => {
     const area = { x: 0, y: 0, width: 1920, height: 1040 };
     const anchor = { x: 700, y: 500 };
