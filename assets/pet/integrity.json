@@ -3,47 +3,228 @@
   "actions": [
     {
       "id": "lounge",
-      "originalDirectory": "01_趴姿晃头摆腿",
+      "originalDirectory": "动画素材_01_趴姿晃头摆腿",
+      "fps": 8,
+      "periodSeconds": 4.5,
+      "loop": true,
+      "width": 448,
+      "height": 456,
       "frames": [
         {
           "file": "frame_01.png",
-          "sha256": "17d205533f622e168c803ffeb70a4815c21fb9ce95b80f6d6ef4696192e890f2",
-          "bytes": 43960
+          "originalFile": "frame_000.png",
+          "sha256": "c0aa9f8f5379a6f71271afa121d0d10e4861a2d921c953c7c7d30061ec73f32c",
+          "bytes": 128995
         },
         {
           "file": "frame_02.png",
-          "sha256": "cbe9db1a138de6ed51a5fb389043f926b3e85b39652f7bebcfd9334c141372fe",
-          "bytes": 37463
+          "originalFile": "frame_001.png",
+          "sha256": "f9837dadd6d5f1a17278a7658bcf66c2a117afec8a35ce1db8e1c7d649028790",
+          "bytes": 128703
         },
         {
           "file": "frame_03.png",
-          "sha256": "3cf0787508d808d69d5622c4e8c2cab35872124a5314cb69863bf8bbd204c97c",
-          "bytes": 37082
+          "originalFile": "frame_002.png",
+          "sha256": "2725d45e37f23d10c1716dad1dbf705a1dd6a2ea76ca6a045b532ce4e27a653e",
+          "bytes": 128842
         },
         {
           "file": "frame_04.png",
-          "sha256": "617289947ad26e760af90580186327ae4713af4b9f4717cf99d10b88511296cd",
-          "bytes": 36674
+          "originalFile": "frame_003.png",
+          "sha256": "90e3b6ed5301b7bf0c69309155a97bff6b22743ef2504b5e4acac8861c368bd5",
+          "bytes": 128728
         },
         {
           "file": "frame_05.png",
-          "sha256": "b00fab5dd44e6eca77c2a765000d0b3c3a4bee9e5d1cd14150b7e37a5d49d0e0",
-          "bytes": 42987
+          "originalFile": "frame_004.png",
+          "sha256": "b98add116619ce2900b51ab690bbade828afeb4e11b37a6645ad7ab088efa8c4",
+          "bytes": 128651
         },
         {
           "file": "frame_06.png",
-          "sha256": "fa0595955c58a309465df179f7b13ccfb1154309a8bc4b50502feaa7fad539a8",
-          "bytes": 40953
+          "originalFile": "frame_005.png",
+          "sha256": "869feca65b9805820fd9d3d021a7312b98edc047e68dc350070b502d1a961052",
+          "bytes": 128781
         },
         {
           "file": "frame_07.png",
-          "sha256": "4870a28a33afa36f9c14f2c573ed1118f312e737cc3ff4c693ec8059b1849ebb",
-          "bytes": 43360
+          "originalFile": "frame_006.png",
+          "sha256": "2504925ed6090c05e8eebfca3eae8442568bad7be68c3788a10be65f395a8560",
+          "bytes": 128811
         },
         {
           "file": "frame_08.png",
-          "sha256": "3a842c35ec50c642cffe9e654d94c019bf8bcc293b7cf3144bf7248dfbd3a8cd",
-          "bytes": 40511
+          "originalFile": "frame_007.png",
+          "sha256": "ef90511445e5492e954db56a27d0612271a6f48e0376b90ca2bd22a4024a0dd3",
+          "bytes": 128778
+        },
+        {
+          "file": "frame_09.png",
+          "originalFile": "frame_008.png",
+          "sha256": "2ae1acb18fbb06a3d99f5d29e76c35cb1b6a480b68d4b154b2169a3b98627467",
+          "bytes": 128814
+        },
+        {
+          "file": "frame_10.png",
+          "originalFile": "frame_009.png",
+          "sha256": "7eb8ad03def8ca4deacd8f80401fd4d2dce48e56120dfaf7f1c1c44dd9749bb1",
+          "bytes": 128797
+        },
+        {
+          "file": "frame_11.png",
+          "originalFile": "frame_010.png",
+          "sha256": "2e515ea393b9017aed436fb775f69ee6abff9f9d90e9ccf0a76d8bc961a4597f",
+          "bytes": 128825
+        },
+        {
+          "file": "frame_12.png",
+          "originalFile": "frame_011.png",
+          "sha256": "30ea9780cf505c8e5d290067c3853271adadeef00f1d6d358218f7a422eb39c6",
+          "bytes": 128773
+        },
+        {
+          "file": "frame_13.png",
+          "originalFile": "frame_012.png",
+          "sha256": "faa6ca2d642834f557d4a1f4d4868a7127b73766e40c7e6321cca77aec417992",
+          "bytes": 128806
+        },
+        {
+          "file": "frame_14.png",
+          "originalFile": "frame_013.png",
+          "sha256": "6081cf429913c47b12c46d90a00e0b2e5cead06da5032e63f7f041bd42fdacea",
+          "bytes": 128779
+        },
+        {
+          "file": "frame_15.png",
+          "originalFile": "frame_014.png",
+          "sha256": "3ad2cde6a86b2c263f6d81cd1721c7a9d98d3221cc4abcac0341b8aa9f6eb930",
+          "bytes": 128599
+        },
+        {
+          "file": "frame_16.png",
+          "originalFile": "frame_015.png",
+          "sha256": "d7153bbc5e0f225cb8dbfae1e18f62b64c6b69670081905c16f058a925d83248",
+          "bytes": 128750
+        },
+        {
+          "file": "frame_17.png",
+          "originalFile": "frame_016.png",
+          "sha256": "dd8b9b0a834bdacb2e36aa355ab22eba26838945893180532323062643ff8319",
+          "bytes": 128794
+        },
+        {
+          "file": "frame_18.png",
+          "originalFile": "frame_017.png",
+          "sha256": "c10c6d7aa9768e33002745b991bfe8629433a9a9a43e79271de5324471724dae",
+          "bytes": 128722
+        },
+        {
+          "file": "frame_19.png",
+          "originalFile": "frame_018.png",
+          "sha256": "ce543e619337f2acd3973e204541567475cc8063de1fa3a31d0d849b48ffd9bb",
+          "bytes": 128464
+        },
+        {
+          "file": "frame_20.png",
+          "originalFile": "frame_019.png",
+          "sha256": "96a07404faa45ace8f478d2151695238062aa65af838776874eb8857db44ddb4",
+          "bytes": 127199
+        },
+        {
+          "file": "frame_21.png",
+          "originalFile": "frame_020.png",
+          "sha256": "f9a104ddd26239134af349d5a37d01fa0ad20cf36857b844935708432d57cfb5",
+          "bytes": 126640
+        },
+        {
+          "file": "frame_22.png",
+          "originalFile": "frame_021.png",
+          "sha256": "475acc03670a0a8a67871aa01246cc2b47cc0b214531a97942a7db1eb5965707",
+          "bytes": 127113
+        },
+        {
+          "file": "frame_23.png",
+          "originalFile": "frame_022.png",
+          "sha256": "5bb1c91b0bc5ab0176d3d3c599ed781d44eab71acb866904774d20c2e081f3ca",
+          "bytes": 128317
+        },
+        {
+          "file": "frame_24.png",
+          "originalFile": "frame_023.png",
+          "sha256": "6444d326ea498120937c8822050f0023713c26733693fc2ed7c61881373cb5d8",
+          "bytes": 128729
+        },
+        {
+          "file": "frame_25.png",
+          "originalFile": "frame_024.png",
+          "sha256": "eb29b700c5a49cc6bc3e3459aca830421861e17f5fd9b9eca94509240b738aa3",
+          "bytes": 128869
+        },
+        {
+          "file": "frame_26.png",
+          "originalFile": "frame_025.png",
+          "sha256": "063d9027fa88bbce506ab2a791b6cea05015d9bc31af5c258122427cd8b8998e",
+          "bytes": 128788
+        },
+        {
+          "file": "frame_27.png",
+          "originalFile": "frame_026.png",
+          "sha256": "941c9c14cc05a768d07afcf17025f27b74fcc8194ae9b4ba881a175762f9ca8a",
+          "bytes": 128889
+        },
+        {
+          "file": "frame_28.png",
+          "originalFile": "frame_027.png",
+          "sha256": "f342cae5726488b65373ba9a77d69de1a584676f8f6d864e0e30ac588978ea24",
+          "bytes": 128779
+        },
+        {
+          "file": "frame_29.png",
+          "originalFile": "frame_028.png",
+          "sha256": "fc2ec70a785d2d8e930e62f37f1f2c879cc83948f3f0282881746332f63e34b3",
+          "bytes": 128873
+        },
+        {
+          "file": "frame_30.png",
+          "originalFile": "frame_029.png",
+          "sha256": "87a05e0586cb656b38668ca3ac548133446c6f4346956093b0a9bf75656904f3",
+          "bytes": 128778
+        },
+        {
+          "file": "frame_31.png",
+          "originalFile": "frame_030.png",
+          "sha256": "3ce996ddd021699f7058b0191fffca7ccfa17d51f23ebe4315398fb864c3d4b2",
+          "bytes": 128826
+        },
+        {
+          "file": "frame_32.png",
+          "originalFile": "frame_031.png",
+          "sha256": "a749d164c1005b9add602837f90e74480d532ae88e2a9429d773d017ef5cfd40",
+          "bytes": 128732
+        },
+        {
+          "file": "frame_33.png",
+          "originalFile": "frame_032.png",
+          "sha256": "5465999af148b4d57ef32ba49867a5d86d49aea1157dd8e49556cfc2ffefbf54",
+          "bytes": 128731
+        },
+        {
+          "file": "frame_34.png",
+          "originalFile": "frame_033.png",
+          "sha256": "f98ec0b9a81bc46f86a75579841e9e498103b23dd1e212d48bb5c691308368c8",
+          "bytes": 128678
+        },
+        {
+          "file": "frame_35.png",
+          "originalFile": "frame_034.png",
+          "sha256": "8fff284a6f036742ab9f377a2f23c18fc2543f0f66e2bade7488a2686aecf44b",
+          "bytes": 128843
+        },
+        {
+          "file": "frame_36.png",
+          "originalFile": "frame_035.png",
+          "sha256": "7043d2a3077eb8fc917fb10d98a0f644244177c89e9974666807dab1854e84e3",
+          "bytes": 128775
         }
       ]
     },
@@ -277,5 +458,6 @@
         }
       ]
     }
-  ]
+  ],
+  "updated": "2026-10-10"
 }

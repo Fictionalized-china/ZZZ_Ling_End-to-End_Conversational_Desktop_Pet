@@ -3,9 +3,10 @@ import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
 import { Relay } from '../app/main/relay';
 import type { AppState } from '../app/shared/desktop';
+import { animationPreferences } from '../app/shared/actions';
 const fresh = (): AppState => ({
   preferences: {
-    disabledActions: [],
+    ...animationPreferences(),
     scale: 1,
     alwaysOnTop: false,
     autoStart: false,

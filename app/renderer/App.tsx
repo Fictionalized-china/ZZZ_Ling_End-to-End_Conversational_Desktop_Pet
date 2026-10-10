@@ -6,8 +6,9 @@ import {
   type CSSProperties,
   type PointerEvent,
 } from 'react';
-import { ACTIONS, framePath, selectActions } from '../shared/actions';
+import { ACTIONS, DEFAULT_DISABLED_ACTIONS, selectActions } from '../shared/actions';
 import type { AppState, DraftImage } from '../shared/desktop';
+import { usePetAnimation } from './usePetAnimation';
 
 const labels = { online: '在线', offline: '不在线', busy: '忙碌' };
 type Panel = 'menu' | 'composer' | 'status' | 'size' | null;
@@ -81,8 +82,6 @@ function Icon({ name, size = 18 }: { name: string; size?: number }) {
 export function App() {
   const [state, setState] = useState<AppState | null>(null),
     [panel, setPanel] = useState<Panel>(null);
-  const [frame, setFrame] = useState(0),
-    [action, setAction] = useState('doze');
   const [text, setText] = useState(''),
     [pairCode, setPairCode] = useState(''),
     [relayUrl, setRelayUrl] = useState('');
@@ -93,9 +92,16 @@ export function App() {
     [bubble, setBubble] = useState(false),
     [connectionSettings, setConnectionSettings] = useState(false);
   const [reducedMotion, setReducedMotion] = useState(false);
-  const imageRef = useRef<HTMLImageElement>(null),
-    alphaRef = useRef<ImageData | null>(null),
-    drag = useRef<{ x: number; y: number; moved: boolean } | null>(null);
+  const { canvasRef, alphaRef } = usePetAnimation(
+    selectActions(
+      state?.effective || 'offline',
+      state?.preferences.disabledActions || DEFAULT_DISABLED_ACTIONS,
+    ),
+    !!state,
+    reducedMotion,
+    setError,
+  );
+  const drag = useRef<{ x: number; y: number; moved: boolean } | null>(null);
   const interactive = useRef(false),
     lastMessage = useRef(''),
     oldCode = useRef('');
@@ -146,43 +152,18 @@ export function App() {
   useEffect(() => {
     window.pet?.setExpanded(!!panel || !!preview || bubble);
   }, [panel, preview, bubble]);
-  const disabledKey = state?.preferences.disabledActions.join(',') || '';
-  useEffect(() => {
-    const choices = selectActions(
-      state?.effective || 'offline',
-      state?.preferences.disabledActions || [],
-    );
-    let index = 0,
-      tick = 0;
-    const selected = choices[0];
-    setAction(selected?.id || 'sway');
-    setFrame(0);
-    if (!selected || reducedMotion || panel) return;
-    const timer = setInterval(() => {
-      const current = choices[index];
-      tick++;
-      setFrame(Math.floor((tick * current.fps) / 30) % current.frames);
-      if (tick >= 30 * 8) {
-        index = (index + 1) % choices.length;
-        tick = 0;
-        setAction(choices[index].id);
-        setFrame(0);
-      }
-    }, 1000 / 30);
-    return () => clearInterval(timer);
-  }, [state?.effective, disabledKey, reducedMotion, panel]);
   useEffect(() => {
     const move = (event: MouseEvent) => {
       const target = event.target as HTMLElement;
       let active = !!target.closest('[data-interactive]') || !!drag.current;
-      const img = imageRef.current,
+      const img = canvasRef.current,
         alpha = alphaRef.current;
       if (!active && img && alpha) {
         const rect = img.getBoundingClientRect(),
-          x = Math.floor(((event.clientX - rect.left) * alpha.width) / rect.width),
-          y = Math.floor(((event.clientY - rect.top) * alpha.height) / rect.height);
+          x = alpha.x + Math.floor(((event.clientX - rect.left) * img.width) / rect.width),
+          y = alpha.y + Math.floor(((event.clientY - rect.top) * img.height) / rect.height);
         if (x >= 0 && y >= 0 && x < alpha.width && y < alpha.height)
-          active = alpha.data[(y * alpha.width + x) * 4 + 3] > 25;
+          active = alpha.data[y * alpha.width + x] > 25;
       }
       if (active !== interactive.current) {
         interactive.current = active;
@@ -192,19 +173,7 @@ export function App() {
     document.addEventListener('mousemove', move);
     return () => document.removeEventListener('mousemove', move);
   }, []);
-  const loadAlpha = () => {
-    const img = imageRef.current;
-    if (!img) return;
-    const canvas = document.createElement('canvas');
-    canvas.width = img.naturalWidth;
-    canvas.height = img.naturalHeight;
-    const ctx = canvas.getContext('2d', { willReadFrequently: true });
-    if (ctx) {
-      ctx.drawImage(img, 0, 0);
-      alphaRef.current = ctx.getImageData(0, 0, canvas.width, canvas.height);
-    }
-  };
-  function onDrag(event: PointerEvent<HTMLImageElement>) {
+  function onDrag(event: PointerEvent<HTMLCanvasElement>) {
     if (!drag.current) return;
     const dx = event.screenX - drag.current.x,
       dy = event.screenY - drag.current.y;
@@ -253,13 +222,12 @@ export function App() {
           {labels[state.effective]}
           <span className="presence-detail">{state.paired ? '已配对' : '等待配对'}</span>
         </div>
-        <img
-          ref={imageRef}
+        <canvas
+          ref={canvasRef}
           className="pet"
-          src={framePath(action, frame)}
-          alt={`铃宝：${ACTIONS.find((a) => a.id === action)?.name}`}
+          role="img"
+          aria-label="铃宝：趴姿晃头摆腿"
           draggable={false}
-          onLoad={loadAlpha}
           onPointerDown={(e) => {
             if (e.button !== 0) return;
             drag.current = { x: e.screenX, y: e.screenY, moved: false };

@@ -1,7 +1,14 @@
 // 仅开发服务器 ?preview=1 使用的视觉检查夹具，不进入生产界面。
 import type { AppState, DesktopApi } from '../shared/desktop';
+import { animationPreferences } from '../shared/actions';
 const state: AppState = {
-  preferences: { disabledActions: [], scale: 1, alwaysOnTop: true, autoStart: false, relayUrl: '' },
+  preferences: {
+    ...animationPreferences(),
+    scale: 1,
+    alwaysOnTop: true,
+    autoStart: false,
+    relayUrl: '',
+  },
   own: 'online',
   peer: 'offline',
   effective: 'offline',

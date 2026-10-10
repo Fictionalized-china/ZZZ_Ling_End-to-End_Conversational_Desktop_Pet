@@ -18,11 +18,11 @@ app.on('browser-window-created', (_event, win) => {
       let result;
       for (let attempt = 0; attempt < 50; attempt++) {
         result = await win.webContents.executeJavaScript(
-          '(async()=>({state:await window.pet.getState(),text:document.body.innerText,images:[...document.images].map(i=>({ready:i.complete,width:i.naturalWidth}))}))()',
+          '(async()=>({state:await window.pet.getState(),text:document.body.innerText,images:[...document.images].map(i=>({ready:i.complete,width:i.naturalWidth})),animation:(()=>{const c=document.querySelector("canvas.pet");return c?{ready:c.dataset.ready,width:c.width,height:c.height,action:c.dataset.action}:null})()}))()',
         );
         if (
           result.text.includes('调整大小') &&
-          result.images.length &&
+          result.animation?.ready === 'true' &&
           result.images.every((image) => image.ready && image.width > 0)
         )
           break;
@@ -35,8 +35,12 @@ app.on('browser-window-created', (_event, win) => {
         assert.equal(result.state.preferences.relayUrl, process.env.DAFEYU_EXPECT_RELAY_URL);
       assert.ok(result.text.includes('菜单') && result.text.includes('调整大小'));
       assert.ok(
-        result.images.length && result.images.every((image) => image.ready && image.width > 0),
+        result.animation?.ready === 'true' &&
+          result.animation.width > 0 &&
+          result.images.every((image) => image.ready && image.width > 0),
       );
+      assert.equal(result.animation.action, 'lounge');
+      assert.equal(result.state.preferences.disabledActions.length, 5);
       const image = await win.webContents.capturePage();
       await fs.mkdir(path.resolve('work'), { recursive: true });
       await fs.writeFile(path.resolve('work/electron-startup.png'), image.toPNG());
@@ -50,6 +54,7 @@ app.on('browser-window-created', (_event, win) => {
             paired: result.state.paired,
             relayUrl: result.state.preferences.relayUrl,
             images: result.images,
+            animation: result.animation,
             window: win.getBounds(),
             electron: process.versions.electron,
           },

@@ -1,6 +1,7 @@
 import type { Choice, Presence } from './protocol';
 export interface Preferences {
   disabledActions: string[];
+  animationDefaultsVersion: number;
   scale: number;
   alwaysOnTop: boolean;
   autoStart: boolean;

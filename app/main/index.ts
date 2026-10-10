@@ -11,7 +11,7 @@ import {
 import { mkdir, readFile, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import { Relay, normalizeRelay } from './relay';
-import { ACTIONS } from '../shared/actions';
+import { ACTIONS, animationPreferences } from '../shared/actions';
 import { MAX_IMAGE, MAX_DIMENSION, pngSize } from '../shared/protocol';
 import type { AppState, DraftImage, Preferences } from '../shared/desktop';
 declare const __RELAY_URL__: string;
@@ -29,7 +29,7 @@ let win: BrowserWindow | undefined,
   petCenter = 220;
 let saveTimer: NodeJS.Timeout | undefined;
 const defaults: Preferences = {
-  disabledActions: [],
+  ...animationPreferences(),
   scale: 1,
   alwaysOnTop: true,
   autoStart: false,
@@ -231,9 +231,7 @@ app.whenReady().then(async () => {
     );
     state.preferences = {
       ...defaults,
-      disabledActions: Array.isArray(saved.disabledActions)
-        ? saved.disabledActions.filter((id: unknown) => ACTIONS.some((a) => a.id === id))
-        : [],
+      ...animationPreferences(saved),
       scale: [0.75, 1, 1.25, 1.5].includes(saved.scale) ? saved.scale : 1,
       alwaysOnTop: saved.alwaysOnTop !== false,
       autoStart: saved.autoStart === true,
@@ -242,6 +240,7 @@ app.whenReady().then(async () => {
       y: Number.isFinite(saved.y) ? saved.y : undefined,
     };
   } catch {}
+  await save().catch(() => {});
   if (process.env.DAFEYU_RELAY_URL && !app.isPackaged)
     state.preferences.relayUrl = normalizeRelay(process.env.DAFEYU_RELAY_URL);
   const area = screen.getPrimaryDisplay().workArea;

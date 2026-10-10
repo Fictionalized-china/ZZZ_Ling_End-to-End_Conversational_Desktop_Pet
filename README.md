@@ -2,7 +2,7 @@
 
 一只待在桌面的伙伴，连接两台 Windows 电脑。文字、图片和粘贴截图经过 Cloudflare 实时转发，仅双方在线且都未忙碌时才能聊天。
 
-面向 Windows 10／11 x64，提供同一个免安装 exe。目前版本为 `0.1.0` 线上测试版。
+面向 Windows 10／11 x64，提供同一个免安装 exe。目前版本为 `0.1.1` 线上测试版。
 
 [下载免安装 EXE](https://github.com/Fictionalized-china/ZZZ_Ling_End-to-End_Conversational_Desktop_Pet/raw/refs/heads/main/%E9%93%83%E5%AE%9D.exe) · [下载整个仓库 ZIP](https://github.com/Fictionalized-china/ZZZ_Ling_End-to-End_Conversational_Desktop_Pet/archive/refs/heads/main.zip)
 
@@ -15,9 +15,11 @@
 3. 另一方在菜单输入配对码，点击 **确认**。配对成功且双方在线后即可聊天。
 4. 双击桌宠，右上方出现输入框。可以输入文字、选择图片，或用 `Ctrl+V` 粘贴截图，再点击 **发送**。
 5. **状态** 可选择在线或忙碌。忙碌时双方都不能收发新消息，草稿保留。
-6. **菜单** 中勾选某个动作代表停用该动作；全部停用时显示静态形象。
+6. 默认只播放新版 **趴姿晃头摆腿**：36 帧、8 FPS、每圈 4.5 秒，首尾连续循环。其余五个动作默认关闭；**菜单 → 动作偏好** 中勾选代表停用，取消勾选即可手动开启。全部停用时显示趴姿静态首帧。
 7. **调整大小** 提供四档大小；**置顶** 同时控制桌宠和弹窗。拖动角色可移动位置。
 8. **取消配对** 或 **退出程序** 结束本次会话。关闭聊天输入框不会退出桌宠。
+
+从 0.1.0 更新后，动作偏好会一次性调整为仅开启趴姿；大小、位置、置顶、自启和连接地址保留。此后手动开启的动作会正常保存。打开菜单、输入框及默认动作下的状态变化不会重置动画；Windows 启用“减少动态效果”时显示静态帧。
 
 当前配对不跨进程保存；短暂断网会自动重连。配对码未使用时有效期 10 分钟，过期后取消并重新生成。开机自启只启动程序，仍须重新配对；启用自启后请保留 exe 原有位置。
 
@@ -68,10 +70,11 @@ npm test
 npm run test:integration
 npm run build
 npm run test:desktop
+npm run test:animation
 npm run test:desktop-network
 ```
 
-`test:integration` 启动真实本地 Cloudflare Worker，以两个 WebSocket 客户端测试协议。`test:desktop` 使用真实 Electron 检查透明窗口、preload、IPC 与首屏。`test:desktop-network` 使用真实 Electron 网络客户端测试配对、消息、忙碌门禁、送达确认和取消后的内存清理。
+`test:integration` 启动真实本地 Cloudflare Worker，以两个 WebSocket 客户端测试协议。`test:desktop` 使用真实 Electron 检查透明窗口、preload、IPC 与首屏。`test:animation` 使用真实 Electron 验证全部 36 帧、两次末帧到首帧衔接、面板与状态不重置、旧设置迁移、透明区域穿透以及手动启用和静态显示。`test:desktop-network` 使用真实 Electron 网络客户端测试配对、消息、忙碌门禁、送达确认和取消后的内存清理。
 
 指定 `DAFEYU_TEST_RELAY_URL` 后，两个网络测试会连接真实 HTTPS 中继，不启动本地 Worker；每次使用独立临时配对并在结束后取消。`DAFEYU_TEST_DIRECT=1` 可让桌面网络测试显式使用直连，避免系统代理影响验证。不要以这项单机双客户端测试替代大陆两台实际电脑的验收。
 
@@ -95,6 +98,6 @@ npm run package
 - [验收记录](docs/验收记录.md)
 - [开发待办](TODO.md)
 
-六组动画由用户提供。原始像素未修改，`assets/pet/integrity.json` 记录整理前 SHA-256，`npm run check` 检查 48 帧完整性。
+动画目录是 `assets/pet/`，第一个动作为 `assets/pet/lounge/`。本次使用用户提供的 `动画素材_01_趴姿晃头摆腿` 替换第一个动作，按升序将 `frame_000.png`～`frame_035.png` 整理为 `frame_01.png`～`frame_36.png`；图片字节、透明通道与像素保持不变。其余五组各 8 帧保留，共 76 帧。`assets/pet/integrity.json` 记录原始文件名、SHA-256 和字节数，`npm run check` 逐一校验。
 
 仓库未附带开放源代码许可证；动画与角色素材的权利归原权利人所有。本次上传不代表对第三方素材作出额外授权。
